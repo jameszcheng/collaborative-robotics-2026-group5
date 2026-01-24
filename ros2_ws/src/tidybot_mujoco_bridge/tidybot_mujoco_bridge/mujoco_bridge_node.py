@@ -158,6 +158,10 @@ class MuJoCoBridgeNode(Node):
         self.last_sim_time = None
         self.lock = threading.Lock()
 
+        # Joint position filtering to reduce RViz jitter
+        self.filtered_joint_positions = {}
+        self.joint_filter_alpha = 0.3  # Lower = more smoothing (0.1-0.5 typical)
+
         # Acceleration limits for smooth motion (m/s^2 and rad/s^2)
         self.max_linear_accel = 2.0   # m/s^2 (higher = snappier response)
         self.max_angular_accel = 4.0  # rad/s^2
@@ -260,9 +264,17 @@ class MuJoCoBridgeNode(Node):
         """Handle position target for the mobile base (go-to-goal)."""
         with self.lock:
             self.position_control_mode = True
-            self.target_pose = msg
+            # Target coordinates are in robot-forward-aligned frame where:
+            # - x is forward (direction camera/arms face)
+            # - y is left
+            # Robot faces -Y at theta=0, so we rotate by -π/2:
+            # x_world = y_input, y_world = -x_input
+            self.target_pose = Pose2D()
+            self.target_pose.x = msg.y
+            self.target_pose.y = -msg.x
+            self.target_pose.theta = msg.theta
             self.get_logger().info(
-                f'New target pose: x={msg.x:.2f}, y={msg.y:.2f}, theta={msg.theta:.2f}'
+                f'Target: forward={msg.x:.2f}m -> world ({self.target_pose.x:.2f}, {self.target_pose.y:.2f})'
             )
 
     def right_arm_callback(self, msg: Float64MultiArray):
@@ -352,9 +364,13 @@ class MuJoCoBridgeNode(Node):
         angle_to_target = np.arctan2(dy, dx)
 
         # Heading error (difference between current heading and angle to target)
-        heading_error = self.normalize_angle(angle_to_target - th)
+        # The robot model faces -Y at theta=0, so actual heading is theta - π/2
+        actual_heading = th - np.pi / 2
+        heading_error = self.normalize_angle(angle_to_target - actual_heading)
 
         # Final orientation error
+        # Both tth and th are in robot-relative terms (0 = initial direction)
+        # So no offset needed here
         orientation_error = self.normalize_angle(tth - th)
 
         # Check if we've reached the goal
@@ -447,8 +463,11 @@ class MuJoCoBridgeNode(Node):
             vth = self.current_vel.angular.z
 
             # Transform velocities from robot frame to world frame
-            cos_th = np.cos(self.base_th)
-            sin_th = np.sin(self.base_th)
+            # The robot model faces -Y at theta=0 (arms/camera point in -Y direction),
+            # so we offset by -π/2 to convert from ROS convention (forward = +X at theta=0)
+            actual_heading = self.base_th - np.pi / 2
+            cos_th = np.cos(actual_heading)
+            sin_th = np.sin(actual_heading)
             self.base_x += (vx * cos_th - vy * sin_th) * dt
             self.base_y += (vx * sin_th + vy * cos_th) * dt
             self.base_th += vth * dt
@@ -485,8 +504,17 @@ class MuJoCoBridgeNode(Node):
                     qpos_adr = self.model.jnt_qposadr[joint_id]
                     qvel_adr = self.model.jnt_dofadr[joint_id]
 
+                    # Get raw position and apply low-pass filter
+                    raw_pos = float(self.data.qpos[qpos_adr])
+                    if name in self.filtered_joint_positions:
+                        filtered_pos = (self.joint_filter_alpha * raw_pos +
+                                       (1 - self.joint_filter_alpha) * self.filtered_joint_positions[name])
+                    else:
+                        filtered_pos = raw_pos
+                    self.filtered_joint_positions[name] = filtered_pos
+
                     joint_state.name.append(name)
-                    joint_state.position.append(float(self.data.qpos[qpos_adr]))
+                    joint_state.position.append(filtered_pos)
                     joint_state.velocity.append(float(self.data.qvel[qvel_adr]))
                     joint_state.effort.append(0.0)  # MuJoCo doesn't directly expose this
 

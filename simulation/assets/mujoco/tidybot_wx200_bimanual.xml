@@ -75,8 +75,8 @@
     <material name="black" rgba="0.30196078 0.30196078 0.30196078 1"/>
     <!-- Original base mesh (comment out to use new base) -->
     <!-- <mesh file="base/body.stl"/> -->
-    <!-- New tidybot custom base mesh decimated and recentered) -->
-    <mesh name="body" file="base/new_tidybot.stl" scale="0.001 0.001 0.001"/>
+    <!-- Crab base mesh -->
+    <mesh name="body" file="base/Crab_Base.stl" scale="0.001 0.001 0.001"/>
 
     <!-- WX200 arm meshes -->
     <mesh name="wx200_base" file="wx200/mobile_wx200_1_base.stl" scale="0.001 0.001 0.001"/>
@@ -97,33 +97,38 @@
     <mesh name="locobot_tilt" file="locobot_pantilt/locobot_tilt.stl" scale="0.001 0.001 0.001"/>
     <mesh name="locobot_camera" file="locobot_pantilt/locobot_camera.stl" scale="0.001 0.001 0.001"/>
 
-    <!-- 2020 Aluminum Extrusion for camera support -->
-    <mesh name="2020_extrusion" file="base/2020_extrusion_250mm.stl" scale="0.001 0.001 0.001"/>
+    <!-- Camera mount (attached underneath top bar) -->
+    <mesh name="camera_mount" file="base/Camera_Mount_v3.stl" scale="0.001 0.001 0.001"/>
   </asset>
 
   <worldbody>
+    <!-- World coordinate frame visualization -->
+    <geom name="world_x_axis" type="cylinder" size="0.005 0.25" pos="0.25 0 0" euler="0 1.5708 0" rgba="1 0 0 1" contype="0" conaffinity="0"/>
+    <geom name="world_y_axis" type="cylinder" size="0.005 0.25" pos="0 0.25 0" euler="1.5708 0 0" rgba="0 1 0 1" contype="0" conaffinity="0"/>
+    <geom name="world_z_axis" type="cylinder" size="0.005 0.25" pos="0 0 0.25" rgba="0 0 1 1" contype="0" conaffinity="0"/>
+    <site name="world_origin" pos="0 0 0" size="0.02" rgba="1 1 1 1"/>
+
     <body name="base_link">
-      <inertial pos="0 0 0.035" mass="60" diaginertia="0.001 0.001 0.001"/>
-      <joint name="joint_x" type="slide" axis="1 0 0"/>
-      <joint name="joint_y" type="slide" axis="0 1 0"/>
-      <joint name="joint_th"/>
+      <inertial pos="0 0 0.19" mass="60" diaginertia="1.5 1.5 2.0"/>
+      <joint name="joint_x" type="slide" axis="1 0 0" damping="1000"/>
+      <joint name="joint_y" type="slide" axis="0 1 0" damping="1000"/>
+      <joint name="joint_th" damping="500"/>
       <geom class="base/visual" mesh="body" material="silver"/>
-      <geom class="base/collision" mesh="body"/>
+      <!-- Use simple box collision instead of mesh to avoid physics instabilities -->
+      <geom name="base_collision" type="box" size="0.22 0.20 0.19" pos="0 0 0.19" contype="1" conaffinity="1" group="3"/>
       <camera name="base" pos="0.2525 0 0.335" euler="0 -0.7853981634 -1.5707963268" fovy="52.23384539951277"
         resolution="640 360"/>
 
-      <!-- ==================== CAMERA SUPPORT EXTRUSION ==================== -->
-      <!-- 2020 Aluminum extrusion (250mm) supporting the pan-tilt camera system -->
-      <!-- Positioned vertically on base top surface (z=0.3847), centered at x=0.12 -->
-      <body name="camera_tower">
-        <geom type="mesh" mesh="2020_extrusion" pos="0.13 -0.01 0.3847" euler="0 0 1.5708"
-              contype="0" conaffinity="0" group="2" rgba="0.7 0.7 0.7 1"/>
-      </body>
+      <!-- ==================== CAMERA MOUNT ==================== -->
+      <!-- Custom camera mount attached underneath the top bar of the robot base (right side) -->
+      <body name="camera_mount" pos="0 -0.1125 0.285" euler="0 0 -1.5708">
+        <geom type="mesh" mesh="camera_mount" pos="0 0 0"
+              contype="0" conaffinity="0" group="2" rgba="0.3 0.3 0.3 1"/>
 
-      <!-- ==================== PAN-TILT CAMERA SYSTEM ==================== -->
-      <!-- LocoBot-style 2-DOF pan-tilt with Intel RealSense D435 -->
-      <!-- Base positioned on top of 250mm extrusion (z=0.3847 + 0.25 = 0.6347) -->
-      <body name="pan_link" pos="0.12 0 0.6347">
+        <!-- ==================== PAN-TILT CAMERA SYSTEM ==================== -->
+        <!-- LocoBot-style 2-DOF pan-tilt with Intel RealSense D435 -->
+        <!-- Mounted on the camera mount underneath the top bar -->
+        <body name="pan_link" pos="0 0 0">
         <inertial pos="0.012 0.000496 0.018504" mass="0.098997"
                   diaginertia="0.0000276300 0.0000204300 0.0000276300"/>
         <joint name="camera_pan" type="hinge" axis="0 0 1" range="-1.5708 1.5708" damping="0.1"/>
@@ -153,10 +158,11 @@
           </body>
         </body>
       </body>
+      </body>
 
       <!-- ==================== RIGHT WX200 ARM ==================== -->
       <!-- 5-DOF arm: waist, shoulder, elbow, wrist_angle, wrist_rotate -->
-      <body name="right_arm_base_link" pos="0.1199 -0.15 0.3847">
+      <body name="right_arm_base_link" pos="0.15 -0.1199 0.3847" euler="0 0 -1.5708">
         <geom type="mesh" mesh="wx200_base" pos="-0.095773 0 -0.10565" quat="0.5 0.5 0.5 0.5"
               contype="0" conaffinity="0" group="2" rgba="0.3 0.3 0.3 1"/>
 
@@ -230,7 +236,7 @@
 
       <!-- ==================== LEFT WX200 ARM ==================== -->
       <!-- 5-DOF arm: waist, shoulder, elbow, wrist_angle, wrist_rotate -->
-      <body name="left_arm_base_link" pos="0.1199 0.15 0.3847">
+      <body name="left_arm_base_link" pos="-0.15 -0.1199 0.3847" euler="0 0 -1.5708">
         <geom type="mesh" mesh="wx200_base" pos="-0.095773 0 -0.10565" quat="0.5 0.5 0.5 0.5"
               contype="0" conaffinity="0" group="2" rgba="0.3 0.3 0.3 1"/>
 

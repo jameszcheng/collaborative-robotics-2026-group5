@@ -16,13 +16,13 @@
   <link name="base_link">
     <visual>
       <geometry>
-        <mesh filename="${mesh_path}/base/new_tidybot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="${mesh_path}/base/Crab_Base.stl" scale="0.001 0.001 0.001"/>
       </geometry>
       <material name="silver"/>
     </visual>
     <collision>
       <geometry>
-        <mesh filename="${mesh_path}/base/new_tidybot.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="${mesh_path}/base/Crab_Base.stl" scale="0.001 0.001 0.001"/>
       </geometry>
     </collision>
     <inertial>
@@ -39,20 +39,24 @@
     <child link="base_link"/>
   </joint>
 
-  <!-- ==================== CAMERA TOWER (EXTRUSION) ==================== -->
-  <link name="camera_tower">
+  <!-- ==================== CAMERA MOUNT ==================== -->
+  <link name="camera_mount">
     <visual>
-      <origin xyz="0.13 -0.01 0.3847" rpy="0 0 1.5708"/>
       <geometry>
-        <mesh filename="${mesh_path}/base/2020_extrusion_250mm.stl" scale="0.001 0.001 0.001"/>
+        <mesh filename="${mesh_path}/base/Camera_Mount_v3.stl" scale="0.001 0.001 0.001"/>
       </geometry>
-      <material name="silver"/>
+      <material name="dark_grey"/>
     </visual>
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
   </link>
-  <joint name="base_to_camera_tower" type="fixed">
+  <joint name="base_to_camera_mount" type="fixed">
     <parent link="base_link"/>
-    <child link="camera_tower"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <child link="camera_mount"/>
+    <origin xyz="0 -0.1125 0.279" rpy="0 0 -1.5708"/>
   </joint>
 
   <!-- ==================== PAN-TILT CAMERA SYSTEM ==================== -->
@@ -71,9 +75,9 @@
     </inertial>
   </link>
   <joint name="camera_pan" type="revolute">
-    <parent link="base_link"/>
+    <parent link="camera_mount"/>
     <child link="pan_link"/>
-    <origin xyz="0.12 0 0.6347" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <axis xyz="0 0 1"/>
     <limit lower="-1.5708" upper="1.5708" effort="2" velocity="1.0"/>
     <dynamics damping="0.1"/>
@@ -137,7 +141,7 @@
   </joint>
 
   <!-- ==================== WX200 ARM MACRO ==================== -->
-  <xacro:macro name="wx200_arm" params="prefix y_offset">
+  <xacro:macro name="wx200_arm" params="prefix x_offset y_offset yaw">
 
     <link name="${prefix}_arm_base_link">
       <visual>
@@ -152,7 +156,7 @@
     <joint name="base_to_${prefix}_arm" type="fixed">
       <parent link="base_link"/>
       <child link="${prefix}_arm_base_link"/>
-      <origin xyz="0.1199 ${y_offset} 0.3847" rpy="0 0 0"/>
+      <origin xyz="${x_offset} ${y_offset} 0.3847" rpy="0 0 ${yaw}"/>
     </joint>
 
     <link name="${prefix}_shoulder_link">
@@ -363,7 +367,7 @@
   </xacro:macro>
 
   <!-- Instantiate both arms -->
-  <xacro:wx200_arm prefix="right" y_offset="-0.15"/>
-  <xacro:wx200_arm prefix="left" y_offset="0.15"/>
+  <xacro:wx200_arm prefix="right" x_offset="0.15" y_offset="-0.1199" yaw="-1.5708"/>
+  <xacro:wx200_arm prefix="left" x_offset="-0.15" y_offset="-0.1199" yaw="-1.5708"/>
 
 </robot>

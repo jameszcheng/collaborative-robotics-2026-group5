@@ -38,20 +38,19 @@ class TestBase(Node):
             Bool, '/base/goal_reached', self.goal_callback, 10
         )
 
-        # State machine
-        self.state = 'MOVE_1'
-        self.state_start_time = None
-
         # Control loop at 10Hz
         self.timer = self.create_timer(0.1, self.control_loop)
+        self.command_sent = False
 
         self.get_logger().info('=' * 50)
-        self.get_logger().info('TidyBot2 Position Control Demo')
+        self.get_logger().info('TidyBot2 Forward Motion Test')
         self.get_logger().info('=' * 50)
 
     def goal_callback(self, msg: Bool):
         if msg.data:
             self.goal_reached = True
+            self.get_logger().info('Goal reached!')
+            self.get_logger().info('=' * 50)
 
     def send_target(self, x, y, theta=0.0):
         msg = Pose2D()
@@ -61,44 +60,11 @@ class TestBase(Node):
         self.target_pub.publish(msg)
 
     def control_loop(self):
-        now = time.time()
-
-        if self.state_start_time is None:
-            self.state_start_time = now
-
-        elapsed = now - self.state_start_time
-
-        # State: Move forward 0.5m
-        if self.state == 'MOVE_1':
-            if elapsed < 0.2:
-                self.send_target(0.5, 0.0)
-                self.get_logger().info('Moving to x=0.5m...')
-            elif self.goal_reached:
-                self.get_logger().info('Reached first target. Waiting 5 seconds...')
-                self.state = 'WAIT'
-                self.state_start_time = now
-                self.goal_reached = False
-
-        # State: Wait 5 seconds
-        elif self.state == 'WAIT':
-            if elapsed >= 5.0:
-                self.get_logger().info('Moving to x=1.0m...')
-                self.state = 'MOVE_2'
-                self.state_start_time = now
-
-        # State: Move another 0.5m forward (total 1.0m)
-        elif self.state == 'MOVE_2':
-            if elapsed < 0.2:
-                self.send_target(1.0, 0.0)
-            elif self.goal_reached:
-                self.get_logger().info('')
-                self.get_logger().info('=' * 50)
-                self.get_logger().info('Done!')
-                self.get_logger().info('=' * 50)
-                self.state = 'DONE'
-
-        elif self.state == 'DONE':
-            pass
+        # Send command once: move 0.5m forward
+        if not self.command_sent:
+            self.get_logger().info('Moving forward 1.0m...')
+            self.send_target(1.0, 0.0)
+            self.command_sent = True
 
 
 def main(args=None):
