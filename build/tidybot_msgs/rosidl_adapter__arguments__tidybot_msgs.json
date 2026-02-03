@@ -1,0 +1,13 @@
+{
+  "package_name": "tidybot_msgs",
+  "non_idl_tuples": [
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:msg/ArmCommand.msg",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:msg/ArmVelocityCommand.msg",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:msg/CartesianVelocityCommand.msg",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:msg/GripperCommand.msg",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:msg/PanTilt.msg",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:srv/SolveIK.srv",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:srv/GetJointState.srv",
+    "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_msgs:srv/PlanToTarget.srv"
+  ]
+}

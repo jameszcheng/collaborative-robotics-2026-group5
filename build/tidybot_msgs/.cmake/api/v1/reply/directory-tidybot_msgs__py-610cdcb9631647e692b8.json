@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "tidybot_msgs__py",
+		"source" : "/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_msgs/tidybot_msgs__py"
+	}
+}

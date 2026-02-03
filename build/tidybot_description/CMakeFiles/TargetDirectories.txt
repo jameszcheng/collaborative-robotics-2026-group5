@@ -1,0 +1,9 @@
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/uninstall.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/tidybot_description_uninstall.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/test.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/edit_cache.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/rebuild_cache.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/list_install_components.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/install.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/install/local.dir
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/tidybot_description/CMakeFiles/install/strip.dir

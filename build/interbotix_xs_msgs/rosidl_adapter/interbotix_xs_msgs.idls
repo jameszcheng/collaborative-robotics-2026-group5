@@ -1,0 +1,14 @@
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/ArmJoy.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/HexJoy.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/JointGroupCommand.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/JointSingleCommand.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/JointTemps.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/JointTrajectoryCommand.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/LocobotJoy.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:msg/TurretJoy.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/MotorGains.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/OperatingModes.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/Reboot.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/RegisterValues.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/RobotInfo.idl
+/home/locobot/team-5-mon-600-730/collaborative-robotics-2026-group5/build/interbotix_xs_msgs/rosidl_adapter/interbotix_xs_msgs:srv/TorqueEnable.idl
