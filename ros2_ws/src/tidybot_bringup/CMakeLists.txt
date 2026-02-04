@@ -24,6 +24,7 @@ install(PROGRAMS
   scripts/test_base_sim.py
   scripts/test_camera_sim.py
   scripts/test_arms_sim.py
+  scripts/pick_box_sim.py
   scripts/test_planner_sim.py
   scripts/test_real_hardware.py
   scripts/test_base_real.py
