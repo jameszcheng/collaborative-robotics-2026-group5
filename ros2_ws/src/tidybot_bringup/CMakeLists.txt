@@ -37,7 +37,8 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
-  scripts/pick_up_block_sim_copy.py
+  scripts/pick_up_block_real.py
+  scripts/test_block_reachability.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
