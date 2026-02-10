@@ -280,7 +280,7 @@ class PickupReal(Node):
         approach_pos = BLOCK_POS + np.array([0, 0, APPROACH_HEIGHT])
         self.get_logger().info(f"Target: {approach_pos.tolist()}")
 
-        success, approach_joints, error_msg = self.solve_ik_for_pose(approach_pos, use_orientation=True)
+        success, approach_joints, error_msg = self.solve_ik_for_pose(approach_pos, use_orientation=False)
         if not success:
             self.get_logger().error(f"Failed to solve IK for approach: {error_msg}")
             return False
@@ -294,7 +294,7 @@ class PickupReal(Node):
         grasp_pos = BLOCK_POS + np.array([0, 0, GRASP_HEIGHT])
         self.get_logger().info(f"Target: {grasp_pos.tolist()}")
 
-        success, grasp_joints, error_msg = self.solve_ik_for_pose(grasp_pos, use_orientation=True)
+        success, grasp_joints, error_msg = self.solve_ik_for_pose(grasp_pos, use_orientation=False)
         if not success:
             self.get_logger().error(f"Failed to solve IK for grasp: {error_msg}")
             return False
@@ -314,7 +314,7 @@ class PickupReal(Node):
         lift_pos = BLOCK_POS + np.array([0, 0, LIFT_HEIGHT])
         self.get_logger().info(f"Target: {lift_pos.tolist()}")
 
-        success, lift_joints, error_msg = self.solve_ik_for_pose(lift_pos, use_orientation=True)
+        success, lift_joints, error_msg = self.solve_ik_for_pose(lift_pos, use_orientation=False)
         if not success:
             self.get_logger().error(f"Failed to solve IK for lift: {error_msg}")
             return False
