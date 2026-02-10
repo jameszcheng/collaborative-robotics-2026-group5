@@ -21,7 +21,7 @@ install(DIRECTORY rviz/
 
 # Install Python scripts as executables
 install(PROGRAMS
-  scripts/detect_banana_real.py
+  scripts/detect_object_real.py
   scripts/test_base_sim.py
   scripts/test_camera_sim.py
   scripts/test_arms_sim.py
