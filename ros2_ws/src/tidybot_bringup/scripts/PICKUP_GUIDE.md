@@ -80,7 +80,7 @@ LIFT_HEIGHT = 0.20      # 20cm lift after grasping
 The script uses a top-down grasp (gripper pointing straight down):
 
 ```python
-# Quaternion for 180° rotation around X-axis
+# Quaternion for 180° rotation around Y-axis
 TOP_DOWN_QUAT = [0.0, 1.0, 0.0, 0.0]  # [x, y, z, w]
 ```
 

@@ -51,7 +51,7 @@ GRASP_HEIGHT = 0.06     # 6cm above block (adjust based on gripper + block size)
 LIFT_HEIGHT = 0.20      # 20cm lift after grasping
 
 # Top-down grasp orientation (gripper pointing down)
-# Quaternion for 180 deg rotation around X-axis
+# Quaternion for 180 deg rotation around Y-axis
 TOP_DOWN_QUAT = [0.0, 1.0, 0.0, 0.0]  # [x, y, z, w]
 
 # Sleep pose (safe resting position)
