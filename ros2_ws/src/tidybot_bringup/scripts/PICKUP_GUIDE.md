@@ -9,25 +9,18 @@ The `pick_up_block_real.py` script enables your robot to pick up blocks from the
 
 ## Quick Start
 
-### 1. Launch the Robot
+### 1. Launch the Robot with IK Planner
 
-**Terminal 1 - Start robot hardware:**
+**Terminal 1 - Start robot hardware + IK service:**
 ```bash
 cd ~/collaborative-robotics-2026-group5/ros2_ws
 source setup_env.bash
-ros2 launch tidybot_bringup real.launch.py
-```
-
-**Terminal 2 - Start IK service:**
-```bash
-cd ~/collaborative-robotics-2026-group5/ros2_ws
-source setup_env.bash
-ros2 run tidybot_ik motion_planner_real_node
+ros2 launch tidybot_bringup real.launch.py use_planner:=true
 ```
 
 ### 2. Run the Pickup Script
 
-**Terminal 3 - Execute pickup:**
+**Terminal 2 - Execute pickup:**
 ```bash
 cd ~/collaborative-robotics-2026-group5/ros2_ws/src/tidybot_bringup/scripts
 source ../../setup_env.bash
@@ -47,10 +40,13 @@ python3 pick_up_block_real.py
 ### IK-Based Motion Planning
 
 Unlike the old hardcoded version, this script:
-- ✅ Computes joint positions automatically using IK
-- ✅ Handles different block positions dynamically
-- ✅ Checks for singularities and collisions
-- ✅ Uses top-down grasping orientation (gripper pointing down)
+- Computes joint positions automatically using IK
+- Handles different block positions dynamically
+- Checks for singularities and collisions
+- Uses top-down grasping orientation (gripper pointing down)
+- Uses cosine-interpolated trajectories at 50Hz for smooth, safe motion
+- Controls arm directly via Interbotix SDK (JointGroupCommand)
+- Controls gripper via PWM commands (JointSingleCommand)
 
 ## Configuration
 
@@ -237,15 +233,16 @@ def apriltag_callback(self, msg):
 
 **Solutions:**
 1. Adjust `GRASP_HEIGHT` - may be too high
-2. Increase gripper closing duration: `self.set_right_gripper(1.0, duration=2.0)`
-3. Check gripper motor torque settings
+2. Increase gripper closing duration: `self.set_right_gripper(open_gripper=False, duration=2.0)`
+3. Adjust `GRIPPER_CLOSE_PWM` value (default: 350.0)
+4. Check gripper motor torque settings
 
 ### Arm Moves Too Fast/Slow
 
-Adjust `move_time` parameter:
+Adjust `max_joint_speed` parameter (rad/s). Duration is calculated automatically:
 ```python
-self.move_right_arm(approach_joints, move_time=5.0)  # slower (5 seconds)
-self.move_right_arm(approach_joints, move_time=1.0)  # faster (1 second)
+self.move_right_arm(approach_joints, max_joint_speed=0.3)  # slower (~17 deg/s)
+self.move_right_arm(approach_joints, max_joint_speed=0.8)  # faster (~46 deg/s)
 ```
 
 ### Block Position Inaccurate
@@ -295,7 +292,7 @@ def publish_block_marker(self, position):
 Test motion without closing gripper:
 ```python
 # Comment out the gripper closing line:
-# self.set_right_gripper(1.0, duration=1.5)
+# self.set_right_gripper(open_gripper=False, duration=1.5)
 ```
 
 ## Next Steps
