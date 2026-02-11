@@ -31,6 +31,7 @@ def launch_setup(context, *args, **kwargs):
     show_mujoco_viewer = LaunchConfiguration('show_mujoco_viewer')
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_motion_planner = LaunchConfiguration('use_motion_planner')
+    use_nlp = LaunchConfiguration('use_nlp').perform(context) == 'true'
 
     # Package paths
     pkg_bringup = FindPackageShare('tidybot_bringup')
@@ -122,7 +123,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    return [
+    nodes = [
         robot_state_publisher,
         mujoco_bridge,
         right_arm_controller,
@@ -130,6 +131,24 @@ def launch_setup(context, *args, **kwargs):
         motion_planner,
         rviz,
     ]
+
+    # NLP interface node
+    if use_nlp:
+        gemini_key = os.environ.get('GEMINI_API_KEY', '')
+        nodes.append(Node(
+            package='tidybot_control',
+            executable='nlp_interface_node',
+            name='nlp_interface',
+            output='screen',
+            parameters=[{
+                'gemini_api_key': gemini_key,
+                'use_voice': False,
+                'use_tts': True,
+                'interactive': True,
+            }],
+        ))
+
+    return nodes
 
 
 def generate_launch_description():
@@ -159,6 +178,11 @@ def generate_launch_description():
         description='Launch motion planner for IK and trajectory planning'
     )
 
+    declare_use_nlp = DeclareLaunchArgument(
+        'use_nlp', default_value='false',
+        description='Launch NLP interface node for natural-language commands'
+    )
+
     return LaunchDescription([
         # Arguments
         declare_scene,
@@ -166,6 +190,7 @@ def generate_launch_description():
         declare_show_viewer,
         declare_use_sim_time,
         declare_use_planner,
+        declare_use_nlp,
         # Nodes via OpaqueFunction (resolved after arguments)
         OpaqueFunction(function=launch_setup),
     ])
