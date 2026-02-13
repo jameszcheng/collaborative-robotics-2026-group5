@@ -6,6 +6,86 @@ This guide shows how to test `detect_object_real.py` on:
 
 The node currently does **2D object detection only** (no 3D pose yet).
 
+## End-to-End: Audio2Text -> Perception (Banana)
+
+This validates the full loop:
+1. Voice/text command -> NLP parse
+2. NLP publishes target object on `/perception/target_label`
+3. Detector searches that label with YOLO
+4. Detection state + bbox are published
+
+Terminal 1: build and source
+
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source /opt/ros/humble/setup.bash
+colcon build --packages-select tidybot_control tidybot_bringup
+source install/setup.bash
+```
+
+Terminal 2: launch robot stack with camera + microphone + NLP
+
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source setup_env.bash
+export GEMINI_API_KEY="YOUR_KEY"
+ros2 launch tidybot_bringup real.launch.py \
+  use_base:=false use_arms:=false use_camera:=true \
+  use_microphone:=true use_nlp:=true use_rviz:=false
+```
+
+Terminal 3: run detector (initial target can be anything; NLP will override)
+
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source setup_env.bash
+ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=apple
+```
+
+Terminal 4: monitor NLP -> perception target
+
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source setup_env.bash
+ros2 topic echo /perception/target_label
+```
+
+Terminal 5: monitor detector outputs
+
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source setup_env.bash
+ros2 topic echo /perception/object_found
+ros2 topic echo /perception/object_label
+ros2 topic echo /perception/object_bbox
+```
+
+Trigger command:
+- In the NLP terminal, say or type:
+  - `pick up the banana and place it in the bin`
+- Then confirm with:
+  - `yes`
+
+Expected behavior:
+- `/perception/target_label` becomes `banana`
+- Detector switches target class to banana
+- If banana is visible:
+  - `/perception/object_found` -> `true`
+  - `/perception/object_label` -> `banana`
+  - `/perception/object_bbox` updates continuously
+
+Optional debug image with box overlay:
+
+```bash
+ros2 run rqt_image_view rqt_image_view
+```
+
+Select topic: `/perception/object_debug_image`.
+
+Notes:
+- If microphone input is unavailable in Docker, type the command in the NLP terminal.
+- Typed input still tests the same NLP -> perception -> detection loop.
+
 ## What The Node Does
 
 Input:
