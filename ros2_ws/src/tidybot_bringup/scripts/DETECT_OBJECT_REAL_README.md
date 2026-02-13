@@ -94,6 +94,7 @@ Input:
 Outputs:
 - `/perception/object_found` (`std_msgs/Bool`)
 - `/perception/object_label` (`std_msgs/String`)
+- `/perception/object_confidence` (`std_msgs/Float32`) (`0.0` when target not detected)
 - `/perception/object_bbox` (`std_msgs/Int32MultiArray`) as `[x, y, w, h]`
 - `/perception/object_debug_image` (`sensor_msgs/Image`)
 

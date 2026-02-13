@@ -8,6 +8,7 @@ plus a 2D bounding box.
 Publishes:
   - /perception/object_found (std_msgs/Bool)
   - /perception/object_label (std_msgs/String)
+  - /perception/object_confidence (std_msgs/Float32)
   - /perception/object_bbox (std_msgs/Int32MultiArray, [x, y, w, h])
   - /perception/object_debug_image (sensor_msgs/Image, optional)
 
@@ -28,7 +29,7 @@ from cv_bridge import CvBridge
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Image
-from std_msgs.msg import Bool, Int32MultiArray, String
+from std_msgs.msg import Bool, Float32, Int32MultiArray, String
 
 
 class ObjectDetectorNode(Node):
@@ -65,6 +66,7 @@ class ObjectDetectorNode(Node):
 
         self.found_pub = self.create_publisher(Bool, "/perception/object_found", 10)
         self.label_pub = self.create_publisher(String, "/perception/object_label", 10)
+        self.conf_pub = self.create_publisher(Float32, "/perception/object_confidence", 10)
         self.bbox_pub = self.create_publisher(Int32MultiArray, "/perception/object_bbox", 10)
         self.debug_pub = self.create_publisher(Image, "/perception/object_debug_image", qos)
 
@@ -106,6 +108,7 @@ class ObjectDetectorNode(Node):
     def rgb_cb(self, msg: Image):
         if self.model is None:
             self.publish_found(False)
+            self.publish_confidence(0.0)
             return
 
         try:
@@ -113,11 +116,13 @@ class ObjectDetectorNode(Node):
         except Exception as exc:
             self.get_logger().warn(f"RGB conversion failed: {exc}")
             self.publish_found(False)
+            self.publish_confidence(0.0)
             return
 
         detection = self.detect_target(bgr)
         if detection is None:
             self.publish_found(False)
+            self.publish_confidence(0.0)
             if self.publish_debug_image:
                 self.publish_debug(bgr, None)
             return
@@ -125,6 +130,7 @@ class ObjectDetectorNode(Node):
         x, y, w, h, conf, label = detection
         self.publish_found(True)
         self.publish_label(label)
+        self.publish_confidence(conf)
         self.publish_bbox((x, y, w, h))
         if self.publish_debug_image:
             self.publish_debug(bgr, detection)
@@ -192,6 +198,11 @@ class ObjectDetectorNode(Node):
         msg = String()
         msg.data = label
         self.label_pub.publish(msg)
+
+    def publish_confidence(self, confidence: float):
+        msg = Float32()
+        msg.data = float(confidence)
+        self.conf_pub.publish(msg)
 
     def publish_bbox(self, bbox: Tuple[int, int, int, int]):
         msg = Int32MultiArray()
