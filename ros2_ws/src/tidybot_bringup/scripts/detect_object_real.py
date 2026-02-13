@@ -13,6 +13,7 @@ Publishes:
 
 Subscribes:
   - /camera/color/image_raw (sensor_msgs/Image)
+  - /perception/target_label (std_msgs/String) [optional runtime target override]
 
 Usage:
   ros2 run tidybot_bringup detect_object_real.py
@@ -60,6 +61,7 @@ class ObjectDetectorNode(Node):
 
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos)
+        self.create_subscription(String, "/perception/target_label", self.target_label_cb, 10)
 
         self.found_pub = self.create_publisher(Bool, "/perception/object_found", 10)
         self.label_pub = self.create_publisher(String, "/perception/object_label", 10)
@@ -70,6 +72,17 @@ class ObjectDetectorNode(Node):
         self.get_logger().info(f"  RGB: {self.rgb_topic}")
         self.get_logger().info(f"  Target label: {self.target_label}")
         self.get_logger().info(f"  Model: {self.model_path}")
+
+    def target_label_cb(self, msg: String):
+        """Update target class at runtime from NLP or other planners."""
+        new_label = str(msg.data).strip().lower()
+        if not new_label:
+            return
+        if new_label == self.target_label:
+            return
+        self.target_label = new_label
+        self.last_found_state = False
+        self.get_logger().info(f"Updated target label: {self.target_label}")
 
     def _init_model(self):
         try:

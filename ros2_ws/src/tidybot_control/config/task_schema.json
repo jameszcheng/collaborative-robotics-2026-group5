@@ -1,5 +1,5 @@
 {
   "intent": ["pick_and_place"],
-  "object": ["apple", "unknown"],
+  "object": ["apple", "banana", "unknown"],
   "target": ["bin", "table", "unknown"]
 }

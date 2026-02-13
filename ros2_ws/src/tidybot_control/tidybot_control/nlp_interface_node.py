@@ -12,6 +12,7 @@ Service:
 
 Topics Published:
     /nlp/response (std_msgs/String) - JSON string of each LLM response
+    /perception/target_label (std_msgs/String) - target object label for perception
 
 Parameters:
     - gemini_api_key (string): Gemini API key (default: from GEMINI_API_KEY env var)
@@ -43,7 +44,6 @@ from tidybot_msgs.srv import NLPCommand, AudioRecord
 
 from tidybot_control.nlp_interface import (
     parse_command,
-    validate_response,
     ValidationError,
     speak,
     transcribe_audio,
@@ -90,6 +90,7 @@ class NLPInterfaceNode(Node):
 
         # Publisher: /nlp/response
         self.response_pub = self.create_publisher(String, '/nlp/response', 10)
+        self.perception_target_pub = self.create_publisher(String, '/perception/target_label', 10)
 
         # Microphone service client (for voice input)
         self.mic_client = None
@@ -143,6 +144,7 @@ class NLPInterfaceNode(Node):
             msg = String()
             msg.data = raw_json
             self.response_pub.publish(msg)
+            self._publish_perception_target_if_present(result)
 
             self.get_logger().info(f'Parsed: "{text}" → {result["type"]}')
 
@@ -208,6 +210,18 @@ class NLPInterfaceNode(Node):
         if self.use_tts:
             speak(text)
 
+    def _publish_perception_target_if_present(self, result: dict):
+        """Publish requested object label so perception can search for it."""
+        if result.get("type") not in ("confirm", "command"):
+            return
+        obj = str(result.get("object", "")).strip().lower()
+        if not obj or obj == "unknown":
+            return
+        msg = String()
+        msg.data = obj
+        self.perception_target_pub.publish(msg)
+        self.get_logger().info(f'Perception target set: "{obj}"')
+
     def _process_input(self, command: str) -> bool:
         """Process a single user input. Returns False if should exit."""
         try:
@@ -219,6 +233,7 @@ class NLPInterfaceNode(Node):
             msg = String()
             msg.data = raw_json
             self.response_pub.publish(msg)
+            self._publish_perception_target_if_present(result)
 
             if result["type"] == "exit":
                 print(f"Robot: {result['message']}")
@@ -254,6 +269,7 @@ class NLPInterfaceNode(Node):
                 msg2 = String()
                 msg2.data = raw_json2
                 self.response_pub.publish(msg2)
+                self._publish_perception_target_if_present(result2)
 
                 if result2["type"] == "command":
                     task_spec = {k: v for k, v in result2.items() if k != "type"}
