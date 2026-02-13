@@ -64,6 +64,7 @@ def launch_setup(context, *args, **kwargs):
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     use_planner = LaunchConfiguration('use_planner').perform(context) == 'true'
     use_microphone = LaunchConfiguration('use_microphone').perform(context) == 'true'
+    use_nlp = LaunchConfiguration('use_nlp').perform(context) == 'true'
     use_sim_topics = LaunchConfiguration('use_sim_topics').perform(context) == 'true'
     load_configs = LaunchConfiguration('load_configs').perform(context) == 'true'
 
@@ -302,6 +303,25 @@ def launch_setup(context, *args, **kwargs):
             }]
         ))
 
+    # NLP interface node
+    if use_nlp:
+        import os as _os
+        gemini_key = _os.environ.get('GEMINI_API_KEY', '')
+        nlp_params = {
+            'gemini_api_key': gemini_key,
+            'use_voice': use_microphone,
+            'use_tts': True,
+            'interactive': True,
+        }
+        nodes.append(Node(
+            package='tidybot_control',
+            executable='nlp_interface_node',
+            name='nlp_interface',
+            output='screen',
+            additional_env=hw_node_env,
+            parameters=[nlp_params],
+        ))
+
     return nodes
 
 
@@ -339,6 +359,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'use_microphone', default_value='true',
             description='Launch microphone recording node'
+        ),
+        DeclareLaunchArgument(
+            'use_nlp', default_value='true',
+            description='Launch NLP interface node for natural-language commands'
         ),
         DeclareLaunchArgument(
             'use_planner', default_value='false',
