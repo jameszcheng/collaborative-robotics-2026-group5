@@ -221,6 +221,8 @@ class ObjectDetectorNode(Node):
             text = f"{label} {conf:.2f}"
             cv2.putText(vis, text, (x, max(25, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2)
 
+        cv2.imwrite("/tmp/detect_debug.jpg", vis)
+
         debug_msg = self.bridge.cv2_to_imgmsg(vis, encoding="bgr8")
         debug_msg.header.stamp = self.get_clock().now().to_msg()
         debug_msg.header.frame_id = "camera_color_optical_frame"
