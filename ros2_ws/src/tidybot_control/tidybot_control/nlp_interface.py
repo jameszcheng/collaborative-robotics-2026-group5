@@ -10,6 +10,7 @@ Supported targets: bin, table
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -210,6 +211,18 @@ def validate_response(raw_output: str) -> dict:
         missing = required - set(spec.keys())
         if missing:
             raise ValidationError(f"Confirm response missing keys: {missing}")
+        if spec["intent"] not in VALID_INTENTS:
+            raise ValidationError(
+                f"Invalid intent: {spec['intent']!r}. Allowed: {VALID_INTENTS}"
+            )
+        if spec["object"] not in VALID_OBJECTS:
+            raise ValidationError(
+                f"Invalid object: {spec['object']!r}. Allowed: {VALID_OBJECTS}"
+            )
+        if spec["target"] not in VALID_TARGETS:
+            raise ValidationError(
+                f"Invalid target: {spec['target']!r}. Allowed: {VALID_TARGETS}"
+            )
         return spec
 
     if spec["type"] == "command":
@@ -236,6 +249,96 @@ def validate_response(raw_output: str) -> dict:
 
 
 # --- LLM Interface ---
+
+def _find_allowed_value(text: str, allowed: set) -> str:
+    """Find the first allowed value present in text as a whole token/phrase."""
+    candidates = sorted((v for v in allowed if v != "unknown"), key=len, reverse=True)
+    for value in candidates:
+        pattern = r"\b" + re.escape(value.lower()) + r"\b"
+        if re.search(pattern, text):
+            return value
+    return "unknown"
+
+
+def _looks_like_pick_and_place(text: str) -> bool:
+    verbs = ("pick", "grab", "take", "place", "put", "move")
+    return any(v in text for v in verbs)
+
+
+def _extract_slots_from_text(command: str) -> dict:
+    """Extract intent/object/target from direct language cues."""
+    text = command.strip().lower()
+    return {
+        "intent": "pick_and_place" if _looks_like_pick_and_place(text) else "",
+        "object": _find_allowed_value(text, VALID_OBJECTS),
+        "target": _find_allowed_value(text, VALID_TARGETS),
+    }
+
+
+def _is_affirmative(command: str) -> bool:
+    text = command.strip().lower()
+    return text in {"yes", "y", "yeah", "yep", "sure", "ok", "okay", "go ahead", "do it"}
+
+
+def _last_confirm_from_history(history: list) -> dict:
+    for turn in reversed(history):
+        raw = turn.get("assistant", "")
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        if data.get("type") == "confirm":
+            return data
+    return {}
+
+
+def _apply_deterministic_fallback(command: str, history: list, parsed: dict) -> dict:
+    slots = _extract_slots_from_text(command)
+    has_full_slots = (
+        slots["intent"] in VALID_INTENTS
+        and slots["object"] in VALID_OBJECTS
+        and slots["object"] != "unknown"
+        and slots["target"] in VALID_TARGETS
+        and slots["target"] != "unknown"
+    )
+
+    # If user gave a clear task but LLM drifted to chat/mismatch, force a schema-valid confirm.
+    if has_full_slots and parsed.get("type") not in {"confirm", "command"}:
+        return {
+            "type": "confirm",
+            "intent": slots["intent"],
+            "object": slots["object"],
+            "target": slots["target"],
+            "message": f'I will pick up the {slots["object"]} and place it in the {slots["target"]}. Should I go ahead?',
+        }
+
+    # Keep extracted slots authoritative when explicitly present in the user's utterance.
+    if parsed.get("type") in {"confirm", "command"} and has_full_slots:
+        parsed["intent"] = slots["intent"]
+        parsed["object"] = slots["object"]
+        parsed["target"] = slots["target"]
+        if parsed["type"] == "confirm":
+            parsed["message"] = (
+                f'I will pick up the {slots["object"]} and place it in the {slots["target"]}. '
+                "Should I go ahead?"
+            )
+        return parsed
+
+    # If user confirms with "yes", turn latest confirm into a command even if LLM responds oddly.
+    if _is_affirmative(command):
+        last_confirm = _last_confirm_from_history(history)
+        if last_confirm:
+            return {
+                "type": "command",
+                "intent": last_confirm.get("intent", "pick_and_place"),
+                "object": last_confirm.get("object", "unknown"),
+                "target": last_confirm.get("target", "unknown"),
+            }
+
+    return parsed
+
 
 def parse_command(command: str, history: list, api_key: str = None) -> dict:
     """Send user input to the LLM with conversation history and return a validated response."""
@@ -264,7 +367,8 @@ def parse_command(command: str, history: list, api_key: str = None) -> dict:
     )
 
     raw_output = response.text
-    return validate_response(raw_output)
+    parsed = validate_response(raw_output)
+    return _apply_deterministic_fallback(command, history, parsed)
 
 
 # --- Text-to-Speech ---
