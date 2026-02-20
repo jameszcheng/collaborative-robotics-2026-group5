@@ -18,6 +18,13 @@ Usage:
         -p mode:=goto -p goal_x:=1.0 -p goal_y:=2.0
 """
 
+'''
+Command to use:
+python3 ~/collaborative-robotics-2026/ros2_ws/src/tidybot_bringup/scripts/movement_1.py \
+    --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=2.0 \
+    -p kp:=1.5 -p goal_tolerance:=0.03
+'''
+
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
