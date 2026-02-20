@@ -18,12 +18,20 @@ Usage:
         -p mode:=goto -p goal_x:=1.0 -p goal_y:=2.0
 """
 
-'''
-Command to use:
+"""
+
+python3 ~/collaborative-robotics-2026/ros2_ws/src/tidybot_bringup/scripts/movement_1.py \
+    --ros-args -p mode:=goto -p goal_x:=0.0 -p goal_y:=0.0 \
+    -p kp:=1.5 -p goal_tolerance:=0.03
+
 python3 ~/collaborative-robotics-2026/ros2_ws/src/tidybot_bringup/scripts/movement_1.py \
     --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=2.0 \
     -p kp:=1.5 -p goal_tolerance:=0.03
-'''
+
+python3 ~/collaborative-robotics-2026/ros2_ws/src/tidybot_bringup/scripts/movement_1.py \
+    --ros-args -p mode:=goto -p goal_x:=0.1 -p goal_y:=0.1 \
+    -p kp:=1.5 -p goal_tolerance:=0.03
+"""
 
 import rclpy
 from rclpy.node import Node
@@ -67,6 +75,12 @@ class TrajectoryTracker(Node):
         self.current_theta = 0.0
         self.odom_received = False
 
+        # Origin offset (set once on first odom message)
+        self.origin_x     = None
+        self.origin_y     = None
+        self.origin_theta = None
+        self.origin_set   = False
+
         # Data storage
         self.data = {
             'time': [], 'ref_x': [], 'ref_y': [],
@@ -99,17 +113,49 @@ class TrajectoryTracker(Node):
     # Odometry callback
     # ------------------------------------------------------------------
     def odom_callback(self, msg: Odometry):
-        self.current_x = msg.pose.pose.position.x
-        self.current_y = msg.pose.pose.position.y
+        raw_x = msg.pose.pose.position.x
+        raw_y = msg.pose.pose.position.y
 
         qz = msg.pose.pose.orientation.z
         qw = msg.pose.pose.orientation.w
         odom_theta = 2.0 * np.arctan2(qz, qw)
+        raw_theta  = odom_theta - np.pi / 2.0  # MuJoCo offset
 
-        # MuJoCo coordinate offset: actual heading is π/2 behind odom theta
-        self.current_theta = odom_theta - np.pi / 2.0
+        # On first message, record origin so (0,0) = robot start pose
+        if not self.origin_set:
+            self.reset_origin(raw_x, raw_y, raw_theta)
+
+        # Express pose relative to origin
+        dx = raw_x - self.origin_x
+        dy = raw_y - self.origin_y
+        dtheta = raw_theta - self.origin_theta
+
+        # Rotate into origin frame
+        c, s = np.cos(-self.origin_theta), np.sin(-self.origin_theta)
+        self.current_x     =  c * dx + s * dy
+        self.current_y     = -s * dx + c * dy
+        self.current_theta = np.arctan2(np.sin(dtheta), np.cos(dtheta))
 
         self.odom_received = True
+
+    def reset_origin(self, raw_x=None, raw_y=None, raw_theta=None):
+        """
+        Treat the robot's current pose as (0, 0) facing forward.
+        Call this once at startup (done automatically on first odom message)
+        or any time you want to re-zero the frame.
+        If raw values are not provided, the current odometry values are used.
+        """
+        if raw_x is None:
+            raw_x, raw_y, raw_theta = self.current_x, self.current_y, self.current_theta
+
+        self.origin_x     = raw_x
+        self.origin_y     = raw_y
+        self.origin_theta = raw_theta
+        self.origin_set   = True
+        self.get_logger().info(
+            f'Origin set: raw pose ({raw_x:.3f}, {raw_y:.3f}, '
+            f'{np.degrees(raw_theta):.1f}°) → robot frame (0, 0, 0°)'
+        )
 
     # ------------------------------------------------------------------
     # Reference trajectory (circular)
