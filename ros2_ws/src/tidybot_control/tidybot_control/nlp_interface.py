@@ -22,13 +22,15 @@ import numpy as np
 try:
     import sounddevice as sd
     HAS_SOUNDDEVICE = True
-except ImportError:
+except (ImportError, OSError):
+    sd = None
     HAS_SOUNDDEVICE = False
 
 try:
     import soundfile as sf
     HAS_SOUNDFILE = True
-except ImportError:
+except (ImportError, OSError):
+    sf = None
     HAS_SOUNDFILE = False
 
 from google import genai

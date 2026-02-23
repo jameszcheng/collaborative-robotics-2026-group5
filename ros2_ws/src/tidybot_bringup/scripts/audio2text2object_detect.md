@@ -57,6 +57,7 @@ Expected:
 ```bash
 cd /home/ubuntu/Desktop/collaborative/ros2_ws
 source setup_env.bash
+ros2 topic echo /nlp/response
 ros2 topic echo /perception/target_label
 ros2 topic echo /perception/object_found
 ```
@@ -65,5 +66,6 @@ ros2 topic echo /perception/object_found
 
 - No voice input: confirm `microphone_node` is running and mic is on the robot machine.
 - No NLP response: verify `GEMINI_API_KEY` is set in Terminal 1.
+- NLP seems silent / no target label: check `ros2 topic echo /nlp/response` to confirm the parser is producing `confirm`/`command` instead of `chat`/error.
 - No detector switch: check `/perception/target_label` topic and detector logs.
 - No detections: verify `/camera/color/image_raw` exists and banana is visible.

@@ -53,7 +53,7 @@ class ObjectDetectorNode(Node):
         self.publish_debug_image = bool(self.get_parameter("publish_debug_image").value)
 
         self.bridge = CvBridge()
-        self.last_found_state = False
+        self.last_found_state = None
         self.last_log_time = 0.0
 
         self.model = None
@@ -108,7 +108,9 @@ class ObjectDetectorNode(Node):
     def rgb_cb(self, msg: Image):
         if self.model is None:
             self.publish_found(False)
+            self.publish_label("")
             self.publish_confidence(0.0)
+            self.publish_bbox((0, 0, 0, 0))
             return
 
         try:
@@ -116,15 +118,19 @@ class ObjectDetectorNode(Node):
         except Exception as exc:
             self.get_logger().warn(f"RGB conversion failed: {exc}")
             self.publish_found(False)
+            self.publish_label("")
             self.publish_confidence(0.0)
+            self.publish_bbox((0, 0, 0, 0))
             return
 
         detection = self.detect_target(bgr)
         if detection is None:
             self.publish_found(False)
+            self.publish_label("")
             self.publish_confidence(0.0)
+            self.publish_bbox((0, 0, 0, 0))
             if self.publish_debug_image:
-                self.publish_debug(bgr, None)
+                self.publish_debug(bgr, None, msg.header)
             return
 
         x, y, w, h, conf, label = detection
@@ -133,7 +139,7 @@ class ObjectDetectorNode(Node):
         self.publish_confidence(conf)
         self.publish_bbox((x, y, w, h))
         if self.publish_debug_image:
-            self.publish_debug(bgr, detection)
+            self.publish_debug(bgr, detection, msg.header)
 
         now = time.time()
         if now - self.last_log_time > 1.0:
@@ -187,12 +193,10 @@ class ObjectDetectorNode(Node):
         return best
 
     def publish_found(self, found: bool):
-        if found == self.last_found_state:
-            return
-        self.last_found_state = found
         msg = Bool()
         msg.data = found
         self.found_pub.publish(msg)
+        self.last_found_state = found
 
     def publish_label(self, label: str):
         msg = String()
@@ -213,6 +217,7 @@ class ObjectDetectorNode(Node):
         self,
         bgr: "cv2.typing.MatLike",
         detection: Optional[Tuple[int, int, int, int, float, str]],
+        image_header,
     ):
         vis = bgr.copy()
         if detection is not None:
@@ -221,11 +226,8 @@ class ObjectDetectorNode(Node):
             text = f"{label} {conf:.2f}"
             cv2.putText(vis, text, (x, max(25, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2)
 
-        cv2.imwrite("/tmp/detect_debug.jpg", vis)
-
         debug_msg = self.bridge.cv2_to_imgmsg(vis, encoding="bgr8")
-        debug_msg.header.stamp = self.get_clock().now().to_msg()
-        debug_msg.header.frame_id = "camera_color_optical_frame"
+        debug_msg.header = image_header
         self.debug_pub.publish(debug_msg)
 
 
