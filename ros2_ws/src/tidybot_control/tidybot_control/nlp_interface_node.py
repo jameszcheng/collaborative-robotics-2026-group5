@@ -42,12 +42,19 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 try:
-    from tidybot_msgs.srv import NlpCommand, AudioRecord
-except ImportError:
-    # Some generated tidybot_msgs Python builds omit NlpCommand from srv/__init__.py
-    # even though tidybot_msgs.srv._nlp_command exists.
     from tidybot_msgs.srv import AudioRecord
-    from tidybot_msgs.srv._nlp_command import NlpCommand
+    try:
+        from tidybot_msgs.srv import NlpCommand  # type: ignore
+    except ImportError:
+        from tidybot_msgs.srv import NLPCommand as NlpCommand  # type: ignore
+except ImportError:
+    # Some generated tidybot_msgs Python builds omit the service symbol from
+    # srv/__init__.py; also support ROS name generation that uses NLPCommand.
+    from tidybot_msgs.srv import AudioRecord
+    try:
+        from tidybot_msgs.srv._nlp_command import NlpCommand  # type: ignore
+    except ImportError:
+        from tidybot_msgs.srv._nlp_command import NLPCommand as NlpCommand  # type: ignore
 
 from tidybot_control.nlp_interface import (
     parse_command,

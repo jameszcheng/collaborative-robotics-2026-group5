@@ -46,9 +46,28 @@ def load_schema(schema_path: str) -> dict:
 
 
 def get_default_schema_path() -> str:
-    """Return the default schema path (relative to this file)."""
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "config", "task_schema.json")
+    """Return the default schema path for both source and installed ROS layouts."""
+    # Installed ROS2 packages place config files under share/<pkg>/config, not site-packages.
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        share_schema = os.path.join(
+            get_package_share_directory("tidybot_control"),
+            "config",
+            "task_schema.json",
+        )
+        if os.path.exists(share_schema):
+            return share_schema
+    except Exception:
+        pass
+
+    # Source-tree fallback (useful for standalone/local execution).
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..",
+        "config",
+        "task_schema.json",
+    )
 
 
 # --- Schema Constants (can be overridden via load_schema) ---
@@ -157,9 +176,6 @@ def build_system_prompt() -> str:
 
         "Output ONLY the raw JSON object. No code fences, no commentary, no extra text.\n"
     )
-
-
-SYSTEM_PROMPT = build_system_prompt()
 
 
 # --- Validation ---
@@ -356,7 +372,8 @@ def parse_command(command: str, history: list, api_key: str = None) -> dict:
 
     # Inject perception context into the system prompt dynamically
     perception_context = _build_perception_context()
-    full_prompt = SYSTEM_PROMPT + perception_context
+    # Build from current schema so runtime schema overrides are reflected in the prompt.
+    full_prompt = build_system_prompt() + perception_context
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
