@@ -6,7 +6,7 @@ Provides a ROS2 service and interactive terminal for natural-language robot cont
 Uses Google Gemini to parse text commands into structured task specifications.
 
 Service:
-    /nlp/parse (tidybot_msgs/srv/NLPCommand)
+    /nlp/parse (tidybot_msgs/srv/NlpCommand)
         - text_input: natural language command
         - Returns: type, intent, object, target, message, raw_json
 
@@ -29,10 +29,11 @@ Usage:
     ros2 run tidybot_control nlp_interface_node --ros-args -p interactive:=false
 
     # Call the service:
-    ros2 service call /nlp/parse tidybot_msgs/srv/NLPCommand "{text_input: 'pick up the apple'}"
+    ros2 service call /nlp/parse tidybot_msgs/srv/NlpCommand "{text_input: 'pick up the apple'}"
 """
 
 import json
+import sys
 import threading
 
 import numpy as np
@@ -40,7 +41,13 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-from tidybot_msgs.srv import NLPCommand, AudioRecord
+try:
+    from tidybot_msgs.srv import NlpCommand, AudioRecord
+except ImportError:
+    # Some generated tidybot_msgs Python builds omit NlpCommand from srv/__init__.py
+    # even though tidybot_msgs.srv._nlp_command exists.
+    from tidybot_msgs.srv import AudioRecord
+    from tidybot_msgs.srv._nlp_command import NlpCommand
 
 from tidybot_control.nlp_interface import (
     parse_command,
@@ -84,9 +91,16 @@ class NLPInterfaceNode(Node):
         self.history_lock = threading.Lock()
 
         # Service: /nlp/parse
-        self.srv = self.create_service(
-            NLPCommand, '/nlp/parse', self._parse_callback
-        )
+        self.srv = None
+        try:
+                self.srv = self.create_service(
+                NlpCommand, '/nlp/parse', self._parse_callback
+            )
+        except Exception as e:
+            # Continue in interactive/topic-only mode if message generation is broken.
+            self.get_logger().error(
+                f'Failed to create /nlp/parse service (NlpCommand type support unavailable): {e}'
+            )
 
         # Publisher: /nlp/response
         self.response_pub = self.create_publisher(String, '/nlp/response', 10)
@@ -109,6 +123,14 @@ class NLPInterfaceNode(Node):
         self.get_logger().info(f'  TTS output: {"enabled" if self.use_tts else "disabled"}')
         self.get_logger().info(f'  Interactive: {"enabled" if self.interactive else "disabled"}')
 
+        if self.interactive and not sys.stdin.isatty():
+            self.get_logger().warn(
+                'Interactive terminal input is unavailable under this launch context '
+                '(stdin is not a TTY). Use /nlp/parse or run `ros2 run tidybot_control '
+                'nlp_interface_node` in its own terminal for push-to-talk.'
+            )
+            self.interactive = False
+
         # Start interactive terminal in a background thread
         if self.interactive:
             self._terminal_thread = threading.Thread(
@@ -117,7 +139,7 @@ class NLPInterfaceNode(Node):
             self._terminal_thread.start()
 
     def _parse_callback(self, request, response):
-        """Handle NLPCommand service calls."""
+        """Handle NlpCommand service calls."""
         text = request.text_input.strip()
         if not text:
             response.success = False
@@ -167,9 +189,11 @@ class NLPInterfaceNode(Node):
     def _record_and_transcribe(self) -> str:
         """Use the microphone service to record audio and transcribe it."""
         if self.mic_client is None:
+            print("  [Voice input unavailable: microphone service not connected]")
             return ""
 
         # Start recording
+        print("  [Push-to-talk: starting microphone recording]")
         req = AudioRecord.Request()
         req.start = True
         future = self.mic_client.call_async(req)
@@ -197,6 +221,7 @@ class NLPInterfaceNode(Node):
             return ""
 
         if not result2.audio_data:
+            print("  [No audio captured]")
             return ""
 
         # Transcribe
@@ -307,6 +332,7 @@ class NLPInterfaceNode(Node):
             return None
 
         if not command and self.mic_client:
+            print("  [Push-to-talk triggered: speak after recording starts]")
             command = self._record_and_transcribe()
             if not command:
                 print("  [No speech detected, try again]")

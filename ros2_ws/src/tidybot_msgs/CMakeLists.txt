@@ -22,7 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/GetJointState.srv"
   "srv/PlanToTarget.srv"
   "srv/AudioRecord.srv"
-  "srv/NLPCommand.srv"
+  "srv/NlpCommand.srv"
   DEPENDENCIES std_msgs geometry_msgs sensor_msgs builtin_interfaces
 )
 
