@@ -174,11 +174,11 @@ class TestBlockReal(Node):
 
     def open_gripper(self):
         self.get_logger().info('Opening gripper...')
-        self.command_gripper_pwm(-350.0, duration=1.0)
+        self.command_gripper_pwm(350.0, duration=1.5)
 
     def close_gripper(self):
         self.get_logger().info('Closing gripper...')
-        self.command_gripper_pwm(350.0, duration=1.0)
+        self.command_gripper_pwm(-350.0, duration=1.5)
 
     def send_sleep_pose(self, duration: float = 2.0):
         self.get_logger().info('Moving arm to sleep pose...')
