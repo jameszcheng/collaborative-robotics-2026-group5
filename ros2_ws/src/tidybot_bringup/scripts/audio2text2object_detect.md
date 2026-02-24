@@ -17,19 +17,26 @@ source /opt/ros/humble/setup.bash
 colcon build --packages-select tidybot_control tidybot_bringup
 ```
 
-## Run (2 Terminals)
+## Run (3 Terminals)
 
-Terminal 1: launch camera + microphone + NLP
+Terminal 1: launch camera + microphone (no NLP)
+```bash
+cd /home/ubuntu/Desktop/collaborative/ros2_ws
+source setup_env.bash
+ros2 launch tidybot_bringup real.launch.py \
+  use_base:=false use_arms:=false use_camera:=true \
+  use_microphone:=true use_rviz:=false
+```
+
+Terminal 2: run NLP interface (interactive)
 ```bash
 cd /home/ubuntu/Desktop/collaborative/ros2_ws
 source setup_env.bash
 export GEMINI_API_KEY="YOUR_KEY"
-ros2 launch tidybot_bringup real.launch.py \
-  use_base:=false use_arms:=false use_camera:=true \
-  use_microphone:=true use_nlp:=true use_rviz:=false
+ros2 run tidybot_control nlp_interface_node
 ```
 
-Terminal 2: run detector
+Terminal 3: run detector
 ```bash
 cd /home/ubuntu/Desktop/collaborative/ros2_ws
 source setup_env.bash
@@ -40,7 +47,7 @@ ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=apple
 
 ## Trigger Test
 
-In Terminal 1 (NLP interactive prompt):
+In Terminal 2 (NLP interactive prompt):
 - Say or type: `pick up the banana and place it in the bin`
 - Then: `yes`
 
@@ -52,7 +59,7 @@ Expected:
   - `/perception/object_label` -> `banana`
   - `/perception/object_bbox` updates
 
-## Optional Monitoring (3rd Terminal)
+## Optional Monitoring (4th Terminal)
 
 ```bash
 cd /home/ubuntu/Desktop/collaborative/ros2_ws
