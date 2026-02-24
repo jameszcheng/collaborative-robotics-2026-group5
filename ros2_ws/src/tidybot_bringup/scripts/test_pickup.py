@@ -10,7 +10,7 @@ Usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
 
     # Terminal 2
-    ros2 run tidybot_bringup test_block_real.py
+    ros2 run tidybot_bringup test_pickup.py
 """
 
 import time
