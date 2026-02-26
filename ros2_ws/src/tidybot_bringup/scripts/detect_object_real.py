@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Object Detection Node (Real Hardware, 2D only).
+Object Detection Node (Real Hardware, 2D + optional 3D pose).
 
 Runs YOLO on RGB images and publishes whether a target object is found
-plus a 2D bounding box.
+plus a 2D bounding box. If depth + CameraInfo + TF are available, also
+publishes a 3D point pose in a world frame.
 
 Publishes:
   - /perception/object_found (std_msgs/Bool)
@@ -11,9 +12,12 @@ Publishes:
   - /perception/object_confidence (std_msgs/Float32)
   - /perception/object_bbox (std_msgs/Int32MultiArray, [x, y, w, h])
   - /perception/object_debug_image (sensor_msgs/Image, optional)
+  - /perception/object_pose (geometry_msgs/PoseStamped, optional)
 
 Subscribes:
   - /camera/color/image_raw (sensor_msgs/Image)
+  - /camera/depth/image_raw (sensor_msgs/Image)
+  - /camera/color/camera_info (sensor_msgs/CameraInfo)
   - /perception/target_label (std_msgs/String) [optional runtime target override]
 
 Usage:
@@ -24,12 +28,71 @@ import time
 from typing import List, Optional, Tuple
 
 import cv2
+import numpy as np
 import rclpy
 from cv_bridge import CvBridge
+from geometry_msgs.msg import PoseStamped
+from rclpy.duration import Duration
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Bool, Float32, Int32MultiArray, String
+import tf2_ros
+
+
+def deproject_uvz_to_camera_xyz(
+    u: float,
+    v: float,
+    z_m: float,
+    fx: float,
+    fy: float,
+    cx: float,
+    cy: float,
+) -> Tuple[float, float, float]:
+    """Back-project pixel/depth to camera optical coordinates."""
+    x_cam = (u - cx) * z_m / fx
+    y_cam = (v - cy) * z_m / fy
+    return x_cam, y_cam, z_m
+
+
+def quat_to_rot_matrix(qx: float, qy: float, qz: float, qw: float):
+    """Convert quaternion to a 3x3 rotation matrix."""
+    xx = qx * qx
+    yy = qy * qy
+    zz = qz * qz
+    xy = qx * qy
+    xz = qx * qz
+    yz = qy * qz
+    wx = qw * qx
+    wy = qw * qy
+    wz = qw * qz
+
+    r00 = 1.0 - 2.0 * (yy + zz)
+    r01 = 2.0 * (xy - wz)
+    r02 = 2.0 * (xz + wy)
+    r10 = 2.0 * (xy + wz)
+    r11 = 1.0 - 2.0 * (xx + zz)
+    r12 = 2.0 * (yz - wx)
+    r20 = 2.0 * (xz - wy)
+    r21 = 2.0 * (yz + wx)
+    r22 = 1.0 - 2.0 * (xx + yy)
+    return (
+        (r00, r01, r02),
+        (r10, r11, r12),
+        (r20, r21, r22),
+    )
+
+
+def transform_point(tf_msg, point_xyz: Tuple[float, float, float]) -> Tuple[float, float, float]:
+    """Apply rigid transform to a 3D point."""
+    x, y, z = point_xyz
+    t = tf_msg.transform.translation
+    q = tf_msg.transform.rotation
+    r = quat_to_rot_matrix(q.x, q.y, q.z, q.w)
+    x_w = r[0][0] * x + r[0][1] * y + r[0][2] * z + t.x
+    y_w = r[1][0] * x + r[1][1] * y + r[1][2] * z + t.y
+    z_w = r[2][0] * x + r[2][1] * y + r[2][2] * z + t.z
+    return x_w, y_w, z_w
 
 
 class ObjectDetectorNode(Node):
@@ -39,6 +102,10 @@ class ObjectDetectorNode(Node):
         super().__init__("object_detector")
 
         self.declare_parameter("rgb_topic", "/camera/color/image_raw")
+        self.declare_parameter("depth_topic", "/camera/depth/image_raw")
+        self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
+        self.declare_parameter("camera_frame", "camera_color_optical_frame")
+        self.declare_parameter("world_frame", "odom")
         self.declare_parameter("target_label", "apple")
         self.declare_parameter("model_path", "yolov8n.pt")
         self.declare_parameter("conf_threshold", 0.35)
@@ -46,6 +113,10 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("publish_debug_image", True)
 
         self.rgb_topic = self.get_parameter("rgb_topic").value
+        self.depth_topic = str(self.get_parameter("depth_topic").value)
+        self.camera_info_topic = str(self.get_parameter("camera_info_topic").value)
+        self.camera_frame = str(self.get_parameter("camera_frame").value)
+        self.world_frame = str(self.get_parameter("world_frame").value)
         self.target_label = str(self.get_parameter("target_label").value).strip().lower()
         self.model_path = self.get_parameter("model_path").value
         self.conf_threshold = float(self.get_parameter("conf_threshold").value)
@@ -55,6 +126,17 @@ class ObjectDetectorNode(Node):
         self.bridge = CvBridge()
         self.last_found_state = None
         self.last_log_time = 0.0
+        self.last_pose_warn_time = 0.0
+
+        self.latest_depth = None
+        self.depth_encoding = ""
+        self.fx = None
+        self.fy = None
+        self.cx = None
+        self.cy = None
+
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         self.model = None
         self.model_names = {}
@@ -62,6 +144,8 @@ class ObjectDetectorNode(Node):
 
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos)
+        self.create_subscription(Image, self.depth_topic, self.depth_cb, qos)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_cb, qos)
         self.create_subscription(String, "/perception/target_label", self.target_label_cb, 10)
 
         self.found_pub = self.create_publisher(Bool, "/perception/object_found", 10)
@@ -69,9 +153,13 @@ class ObjectDetectorNode(Node):
         self.conf_pub = self.create_publisher(Float32, "/perception/object_confidence", 10)
         self.bbox_pub = self.create_publisher(Int32MultiArray, "/perception/object_bbox", 10)
         self.debug_pub = self.create_publisher(Image, "/perception/object_debug_image", qos)
+        self.pose_pub = self.create_publisher(PoseStamped, "/perception/object_pose", 10)
 
         self.get_logger().info("Object detector started")
         self.get_logger().info(f"  RGB: {self.rgb_topic}")
+        self.get_logger().info(f"  Depth: {self.depth_topic}")
+        self.get_logger().info(f"  CameraInfo: {self.camera_info_topic}")
+        self.get_logger().info(f"  Pose frame: {self.world_frame}")
         self.get_logger().info(f"  Target label: {self.target_label}")
         self.get_logger().info(f"  Model: {self.model_path}")
 
@@ -104,6 +192,86 @@ class ObjectDetectorNode(Node):
             self.get_logger().error(f"Failed to load model '{self.model_path}': {exc}")
             self.model = None
             self.model_names = {}
+
+    def depth_cb(self, msg: Image):
+        try:
+            self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            self.depth_encoding = str(msg.encoding).lower()
+        except Exception as exc:
+            self.latest_depth = None
+            self._warn_pose_throttled(f"Depth conversion failed: {exc}")
+
+    def camera_info_cb(self, msg: CameraInfo):
+        self.fx = float(msg.k[0])
+        self.fy = float(msg.k[4])
+        self.cx = float(msg.k[2])
+        self.cy = float(msg.k[5])
+
+    def _warn_pose_throttled(self, text: str):
+        now = time.time()
+        if now - self.last_pose_warn_time > 1.0:
+            self.last_pose_warn_time = now
+            self.get_logger().warn(text)
+
+    def _depth_at_uv_m(self, u: int, v: int) -> Optional[float]:
+        if self.latest_depth is None:
+            return None
+        if v < 0 or u < 0:
+            return None
+        if v >= self.latest_depth.shape[0] or u >= self.latest_depth.shape[1]:
+            return None
+
+        raw = self.latest_depth[v, u]
+        if isinstance(raw, np.ndarray):
+            raw = raw.item()
+        z = float(raw)
+        if not np.isfinite(z) or z <= 0.0:
+            return None
+
+        # RealSense depth is usually 16UC1 in millimeters.
+        if self.depth_encoding in ("16uc1", "mono16"):
+            z = z / 1000.0
+        return z
+
+    def _publish_pose(self, x: int, y: int, w: int, h: int, image_header):
+        if any(k is None for k in [self.fx, self.fy, self.cx, self.cy]):
+            self._warn_pose_throttled("No camera intrinsics yet; skipping /perception/object_pose.")
+            return
+
+        u = int(round(x + 0.5 * w))
+        v = int(round(y + 0.5 * h))
+        z_m = self._depth_at_uv_m(u, v)
+        if z_m is None:
+            self._warn_pose_throttled("Invalid depth at bbox center; skipping /perception/object_pose.")
+            return
+
+        x_cam, y_cam, z_cam = deproject_uvz_to_camera_xyz(
+            float(u), float(v), z_m, self.fx, self.fy, self.cx, self.cy
+        )
+
+        try:
+            tf_msg = self.tf_buffer.lookup_transform(
+                self.world_frame,
+                self.camera_frame,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.15),
+            )
+        except Exception as exc:
+            self._warn_pose_throttled(
+                f"TF lookup failed ({self.world_frame} <- {self.camera_frame}): {exc}"
+            )
+            return
+
+        x_w, y_w, z_w = transform_point(tf_msg, (x_cam, y_cam, z_cam))
+
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = image_header.stamp
+        pose_msg.header.frame_id = self.world_frame
+        pose_msg.pose.position.x = float(x_w)
+        pose_msg.pose.position.y = float(y_w)
+        pose_msg.pose.position.z = float(z_w)
+        pose_msg.pose.orientation.w = 1.0
+        self.pose_pub.publish(pose_msg)
 
     def rgb_cb(self, msg: Image):
         if self.model is None:
@@ -138,6 +306,7 @@ class ObjectDetectorNode(Node):
         self.publish_label(label)
         self.publish_confidence(conf)
         self.publish_bbox((x, y, w, h))
+        self._publish_pose(x, y, w, h, msg.header)
         if self.publish_debug_image:
             self.publish_debug(bgr, detection, msg.header)
 
