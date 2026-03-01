@@ -1,71 +1,80 @@
 #!/usr/bin/env python3
 """
-TidyBot2 Circular Trajectory Tracking + Go-To-Position
-v1.0.5
-
-Topics used:
-- SIMULATOR: /base/target_pose (Pose2D), /base/goal_reached (Bool)
-- REAL:      /cmd_vel (Twist), /odom (Odometry)
+movement_2.py — TidyBot2 Circular Trajectory Tracking + Go-To-Position
+v1.0.6
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 1 — Start the robot
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   # Simulator
-   ros2 launch tidybot_bringup sim.launch.py
+  # Simulator
+  ros2 launch tidybot_bringup sim.launch.py
 
-   # Real robot
-   ros2 launch tidybot_bringup real.launch.py
+  # Real robot
+  ros2 launch tidybot_bringup real.launch.py
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TERMINAL 2 — BASIC TESTS (run these first to verify robot works)
+TERMINAL 2 — BASIC TESTS (run these first)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-   SIMULATOR tests (uses /base/target_pose — same as test_base_sim.py):
-   python3 movement_1.py --ros-args -p mode:=test -p test:=forward
-   python3 movement_1.py --ros-args -p mode:=test -p test:=backward
-   python3 movement_1.py --ros-args -p mode:=test -p test:=left
-   python3 movement_1.py --ros-args -p mode:=test -p test:=right
+  SIM (uses /base/target_pose + /base/goal_reached):
+  python3 movement_2.py --ros-args -p mode:=test -p test:=forward
+  python3 movement_2.py --ros-args -p mode:=test -p test:=backward
+  python3 movement_2.py --ros-args -p mode:=test -p test:=left
+  python3 movement_2.py --ros-args -p mode:=test -p test:=right
 
-   REAL ROBOT tests (uses /cmd_vel + /odom — same as test_base_real.py):
-   python3 movement_1.py --ros-args -p mode:=test -p test:=forward -p robot:=real
-   python3 movement_1.py --ros-args -p mode:=test -p test:=backward -p robot:=real
-   python3 movement_1.py --ros-args -p mode:=test -p test:=left -p robot:=real
-   python3 movement_1.py --ros-args -p mode:=test -p test:=right -p robot:=real
+  REAL (uses /cmd_vel + /odom):
+  python3 movement_2.py --ros-args -p mode:=test -p test:=forward -p robot:=real
+  python3 movement_2.py --ros-args -p mode:=test -p test:=backward -p robot:=real
+  python3 movement_2.py --ros-args -p mode:=test -p test:=left -p robot:=real
+  python3 movement_2.py --ros-args -p mode:=test -p test:=right -p robot:=real
 
-   Custom distance (metres) or angle (degrees):
-   python3 movement_1.py --ros-args -p mode:=test -p test:=forward -p test_distance:=1.0 -p robot:=real
-   python3 movement_1.py --ros-args -p mode:=test -p test:=left -p test_angle:=180.0 -p robot:=real
+  Custom distance (m) or angle (deg):
+  python3 movement_2.py --ros-args -p mode:=test -p test:=forward -p test_distance:=1.0 -p robot:=real
+  python3 movement_2.py --ros-args -p mode:=test -p test:=left -p test_angle:=180.0 -p robot:=real
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 2 — MOVEMENT COMMANDS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-   1) Reset origin  — first time only, robot must be stationary
-      python3 movement_1.py --ros-args -p mode:=reset_origin
-      python3 movement_1.py --ros-args -p mode:=reset_origin -p robot:=real
+  1) Reset origin  (recommended before REAL runs; robot must be stationary)
+     python3 movement_2.py --ros-args -p mode:=reset_origin
+     python3 movement_2.py --ros-args -p mode:=reset_origin -p robot:=real
 
-   2) Go to position (metres relative to origin)
-      python3 movement_1.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0
-      python3 movement_1.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0 -p robot:=real
+  2) Go to position (metres relative to origin)
+     python3 movement_2.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0
+     python3 movement_2.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0 -p robot:=real
 
-   3) Multiple waypoints — flat list [x1,y1, x2,y2, ...]
-      python3 movement_1.py --ros-args -p mode:=goto -p waypoints:="[1.0,0.0, 1.0,1.0, 0.0,0.0]"
-      python3 movement_1.py --ros-args -p mode:=goto -p waypoints:="[1.0,0.0, 1.0,1.0, 0.0,0.0]" -p robot:=real
+  3) Multiple waypoints — flat list [x1,y1, x2,y2, ...]
+     python3 movement_2.py --ros-args -p mode:=goto -p waypoints:="[1.0,0.0, 1.0,1.0, 0.0,0.0]"
+     python3 movement_2.py --ros-args -p mode:=goto -p waypoints:="[1.0,0.0, 1.0,1.0, 0.0,0.0]" -p robot:=real
 
-   4) Circular trajectory
-      python3 movement_1.py --ros-args -p mode:=circle
-      python3 movement_1.py --ros-args -p mode:=circle -p robot:=real
+  4) Circular trajectory
+     python3 movement_2.py --ros-args -p mode:=circle
+     python3 movement_2.py --ros-args -p mode:=circle -p robot:=real
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OPTIONAL PARAMETERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   -p robot:=real           # real robot (default: sim)
-   -p kp:=1.5               # proportional gain (default: 1.0)
-   -p max_v:=0.2            # max linear speed m/s (default: 0.2)
-   -p max_omega:=2.0        # max rotation speed rad/s (default: 2.0)
-   -p goal_tolerance:=0.05  # goal tolerance metres (default: 0.05)
-   -p test_distance:=0.5    # distance for forward/backward test (default: 0.5 m)
-   -p test_angle:=90.0      # angle for left/right test (default: 90 degrees)
+  -p robot:=real                # real robot (default: sim)
+  -p kp:=1.5                    # proportional gain (default: 1.0)
+  -p max_v:=0.2                 # max linear speed m/s (default: 0.2)
+  -p max_omega:=2.0             # max rotation speed rad/s (default: 2.0)
+  -p goal_tolerance:=0.05       # goal tolerance metres (default: 0.05)
+  -p duration:=20.0             # circle duration (s)
+
+  # NEW (sim↔real robustness)
+  -p yaw_offset:=0.0            # radians added to yaw from odom (default: sim=-pi/2, real=0)
+  -p origin_namespace:=real     # origin file suffix (default: robot name; separates sim vs real)
+  -p sim_pose_theta_degrees:=false  # if your sim base expects Pose2D.theta in degrees (default false=radians)
+
+  # Origin locking stability tuning
+  -p stable_required:=25            # samples to confirm stable (default 25 @50Hz ≈0.5s)
+  -p stable_xy_threshold:=0.005     # metres (default 0.005)
+  -p stable_theta_threshold:=0.02   # radians (default 0.02 ≈1.15°)
+
+Notes:
+- This version uses robust quaternion→yaw (x,y,z,w) and separate origin files for sim/real to
+  avoid “disoriented” behavior caused by mixed coordinate conventions.
 """
 
 import rclpy
@@ -79,12 +88,36 @@ import os
 import time
 from datetime import datetime
 
+VERSION = "1.0.6"
 
-VERSION = "1.0.5"
+
+def wrap_angle(a: float) -> float:
+    return float(np.arctan2(np.sin(a), np.cos(a)))
+
+
+def quat_to_yaw(x: float, y: float, z: float, w: float) -> float:
+    """
+    Standard yaw-from-quaternion (robust even with small roll/pitch).
+    yaw = atan2(2(wz + xy), 1 - 2(y^2 + z^2))
+    """
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return float(np.arctan2(siny_cosp, cosy_cosp))
+
+
+def circular_mean(angles):
+    s = np.mean(np.sin(angles))
+    c = np.mean(np.cos(angles))
+    return float(np.arctan2(s, c))
+
+
+def circular_range(angles):
+    m = circular_mean(angles)
+    diffs = [wrap_angle(a - m) for a in angles]
+    return float(max(diffs) - min(diffs))
 
 
 class TrajectoryTracker(Node):
-
     def __init__(self):
         super().__init__('trajectory_tracker')
 
@@ -104,24 +137,55 @@ class TrajectoryTracker(Node):
         self.declare_parameter('test_distance', 0.5)    # metres
         self.declare_parameter('test_angle', 90.0)      # degrees
 
-        self.kp            = self.get_parameter('kp').value
-        self.save_data     = self.get_parameter('save_data').value
-        self.duration      = self.get_parameter('duration').value
-        self.mode          = self.get_parameter('mode').value
-        self.goal_x        = self.get_parameter('goal_x').value
-        self.goal_y        = self.get_parameter('goal_y').value
-        self.goal_tol      = self.get_parameter('goal_tolerance').value
-        self.max_v         = self.get_parameter('max_v').value
-        self.max_omega     = self.get_parameter('max_omega').value
-        self.robot         = self.get_parameter('robot').value
-        self.test          = self.get_parameter('test').value
-        self.test_distance = self.get_parameter('test_distance').value
-        self.test_angle    = np.radians(self.get_parameter('test_angle').value)
+        # NEW: robustness knobs
+        self.declare_parameter('yaw_offset', float('nan'))       # radians; NaN => auto (sim:-pi/2, real:0)
+        self.declare_parameter('origin_namespace', '')           # '' => auto from robot ('sim'/'real')
+        self.declare_parameter('sim_pose_theta_degrees', False)  # Pose2D.theta in degrees? (default radians)
+
+        # Origin locking stability knobs
+        self.declare_parameter('stable_xy_threshold', 0.005)     # metres
+        self.declare_parameter('stable_theta_threshold', 0.02)   # radians
+        self.declare_parameter('stable_required', 25)            # samples (~0.5s at 50Hz)
+
+        # Read params
+        self.kp            = float(self.get_parameter('kp').value)
+        self.save_data     = bool(self.get_parameter('save_data').value)
+        self.duration      = float(self.get_parameter('duration').value)
+        self.mode          = str(self.get_parameter('mode').value)
+        self.goal_x        = float(self.get_parameter('goal_x').value)
+        self.goal_y        = float(self.get_parameter('goal_y').value)
+        self.goal_tol      = float(self.get_parameter('goal_tolerance').value)
+        self.max_v         = float(self.get_parameter('max_v').value)
+        self.max_omega     = float(self.get_parameter('max_omega').value)
+        self.robot         = str(self.get_parameter('robot').value)
+        self.test          = str(self.get_parameter('test').value)
+        self.test_distance = float(self.get_parameter('test_distance').value)
+        self.test_angle    = float(np.radians(self.get_parameter('test_angle').value))
+
+        self.sim_pose_theta_degrees = bool(self.get_parameter('sim_pose_theta_degrees').value)
+
+        # Stability config
+        self._stable_threshold_xy = float(self.get_parameter('stable_xy_threshold').value)
+        self._stable_threshold_th = float(self.get_parameter('stable_theta_threshold').value)
+        self._stable_required     = int(self.get_parameter('stable_required').value)
+
+        # yaw offset
+        yaw_offset_param = float(self.get_parameter('yaw_offset').value)
+        if np.isnan(yaw_offset_param):
+            self.yaw_offset = -np.pi / 2.0 if self.robot == 'sim' else 0.0
+        else:
+            self.yaw_offset = yaw_offset_param
+
+        # Origin file namespace
+        ns = str(self.get_parameter('origin_namespace').value).strip()
+        if ns == '':
+            ns = self.robot
+        self.origin_file = os.path.expanduser(f'~/.tidybot_origin_{ns}.txt')
 
         # Build waypoint list
         raw_wp = self.get_parameter('waypoints').value
         if len(raw_wp) >= 2 and not (len(raw_wp) == 1 and raw_wp[0] == 0.0):
-            self.waypoints = [(raw_wp[i], raw_wp[i+1]) for i in range(0, len(raw_wp)-1, 2)]
+            self.waypoints = [(raw_wp[i], raw_wp[i + 1]) for i in range(0, len(raw_wp) - 1, 2)]
         else:
             self.waypoints = [(self.goal_x, self.goal_y)]
         self.waypoint_index = 0
@@ -136,17 +200,12 @@ class TrajectoryTracker(Node):
         self.current_theta = 0.0
         self.odom_received = False
 
-        # Origin (persistent across runs via file)
+        # Origin
         self.origin_x     = None
         self.origin_y     = None
         self.origin_theta = None
         self.origin_set   = False
-        self.origin_file  = os.path.expanduser('~/.tidybot_origin.txt')
-
-        # Stabilisation before locking origin
-        self._stable_readings  = []
-        self._stable_required  = 25      # ~0.5s at 50Hz
-        self._stable_threshold = 0.005   # metres
+        self._stable_readings = []   # list of (x,y,theta)
 
         # Simulator goal tracking
         self.sim_goal_reached = False
@@ -162,11 +221,12 @@ class TrajectoryTracker(Node):
         self.running    = True
 
         # --- Print startup info ---
-        self.get_logger().info(f'=== movement_1.py  v{VERSION} ===')
-        self.get_logger().info(f'Running from: {os.path.abspath(__file__)}')
+        self.get_logger().info(f'=== movement_2.py  v{VERSION} ===')
         self.get_logger().info(f'Robot: {self.robot.upper()} | Mode: {self.mode}')
+        self.get_logger().info(f'Origin file: {self.origin_file}')
+        self.get_logger().info(f'yaw_offset = {self.yaw_offset:.4f} rad ({np.degrees(self.yaw_offset):.2f}°)')
 
-        # --- Handle reset_origin immediately, no ROS interfaces needed ---
+        # --- Handle reset_origin immediately ---
         if self.mode == 'reset_origin':
             self._reset_saved_origin()
             return
@@ -178,21 +238,16 @@ class TrajectoryTracker(Node):
         # --- Publishers ---
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # Simulator additionally uses the high-level target_pose interface
-        # (matches test_base_sim.py which uses /base/target_pose + /base/goal_reached)
         if self.robot == 'sim':
             self.target_pub = self.create_publisher(Pose2D, '/base/target_pose', 10)
-            self.create_subscription(Bool, '/base/goal_reached',
-                                     self._sim_goal_callback, 10)
+            self.create_subscription(Bool, '/base/goal_reached', self._sim_goal_callback, 10)
 
         # --- Subscribers & control timer ---
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_timer(0.02, self.control_loop)  # 50 Hz
 
         if self.mode == 'goto':
-            self.get_logger().info(
-                f'Waypoints: {self.waypoints} | tolerance={self.goal_tol:.3f} m'
-            )
+            self.get_logger().info(f'Waypoints: {self.waypoints} | tolerance={self.goal_tol:.3f} m')
         if self.mode == 'test':
             self.get_logger().info(
                 f'Test: {self.test.upper()} | '
@@ -201,7 +256,7 @@ class TrajectoryTracker(Node):
             )
 
     # ------------------------------------------------------------------
-    # Simulator goal callback (matches test_base_sim.py)
+    # Simulator goal callback
     # ------------------------------------------------------------------
     def _sim_goal_callback(self, msg: Bool):
         if msg.data:
@@ -215,13 +270,9 @@ class TrajectoryTracker(Node):
         raw_x = msg.pose.pose.position.x
         raw_y = msg.pose.pose.position.y
 
-        qz = msg.pose.pose.orientation.z
-        qw = msg.pose.pose.orientation.w
-        odom_theta = 2.0 * np.arctan2(qz, qw)
-
-        # Real robot: use quaternion yaw directly (matches test_base_real.py)
-        # Simulator (MuJoCo): subtract π/2 to correct coordinate frame
-        raw_theta = odom_theta - (np.pi / 2.0 if self.robot == 'sim' else 0.0)
+        q = msg.pose.pose.orientation
+        odom_theta = quat_to_yaw(q.x, q.y, q.z, q.w)
+        raw_theta = wrap_angle(odom_theta + self.yaw_offset)
 
         # Test mode: just track raw position, no origin transform needed
         if self.mode == 'test':
@@ -235,27 +286,34 @@ class TrajectoryTracker(Node):
         if not self.origin_set:
             self._stable_readings.append((raw_x, raw_y, raw_theta))
             if len(self._stable_readings) >= self._stable_required:
-                xs = [r[0] for r in self._stable_readings]
-                ys = [r[1] for r in self._stable_readings]
-                if (max(xs) - min(xs) < self._stable_threshold and
-                        max(ys) - min(ys) < self._stable_threshold):
-                    avg_x     = sum(xs) / len(xs)
-                    avg_y     = sum(ys) / len(ys)
-                    avg_theta = self._stable_readings[-1][2]
+                xs  = [r[0] for r in self._stable_readings]
+                ys  = [r[1] for r in self._stable_readings]
+                ths = [r[2] for r in self._stable_readings]
+
+                xy_ok = (max(xs) - min(xs) < self._stable_threshold_xy and
+                         max(ys) - min(ys) < self._stable_threshold_xy)
+                th_ok = (circular_range(ths) < self._stable_threshold_th)
+
+                if xy_ok and th_ok:
+                    avg_x = float(np.mean(xs))
+                    avg_y = float(np.mean(ys))
+                    avg_theta = circular_mean(ths)
                     self._set_origin(avg_x, avg_y, avg_theta)
                 else:
+                    # sliding window
                     self._stable_readings.pop(0)
             return
 
         # Express current pose relative to fixed origin frame
-        dx     = raw_x - self.origin_x
-        dy     = raw_y - self.origin_y
-        dtheta = raw_theta - self.origin_theta
+        dx = raw_x - self.origin_x
+        dy = raw_y - self.origin_y
+        dtheta = wrap_angle(raw_theta - self.origin_theta)
 
+        # Rotate world->origin frame
         c, s = np.cos(-self.origin_theta), np.sin(-self.origin_theta)
-        self.current_x     =  c * dx + s * dy
-        self.current_y     = -s * dx + c * dy
-        self.current_theta = np.arctan2(np.sin(dtheta), np.cos(dtheta))
+        self.current_x = c * dx + s * dy
+        self.current_y = -s * dx + c * dy
+        self.current_theta = dtheta
 
         self.odom_received = True
 
@@ -263,14 +321,14 @@ class TrajectoryTracker(Node):
     # Origin helpers
     # ------------------------------------------------------------------
     def _set_origin(self, raw_x, raw_y, raw_theta):
-        self.origin_x     = raw_x
-        self.origin_y     = raw_y
-        self.origin_theta = raw_theta
-        self.origin_set   = True
+        self.origin_x = float(raw_x)
+        self.origin_y = float(raw_y)
+        self.origin_theta = float(raw_theta)
+        self.origin_set = True
         self._save_origin()
         self.get_logger().info(
-            f'Origin locked (robot stable): ({raw_x:.3f}, {raw_y:.3f}, '
-            f'{np.degrees(raw_theta):.1f}°) → saved as (0, 0, 0°)'
+            f'Origin locked (robot stable): ({raw_x:.3f}, {raw_y:.3f}, {np.degrees(raw_theta):.1f}°) '
+            f'→ saved as (0, 0, 0°)'
         )
 
     def _save_origin(self):
@@ -288,13 +346,12 @@ class TrajectoryTracker(Node):
         try:
             with open(self.origin_file, 'r') as f:
                 parts = f.read().strip().split(',')
-            self.origin_x     = float(parts[0])
-            self.origin_y     = float(parts[1])
+            self.origin_x = float(parts[0])
+            self.origin_y = float(parts[1])
             self.origin_theta = float(parts[2])
-            self.origin_set   = True
+            self.origin_set = True
             self.get_logger().info(
-                f'Origin reloaded: ({self.origin_x:.3f}, {self.origin_y:.3f}, '
-                f'{np.degrees(self.origin_theta):.1f}°)'
+                f'Origin reloaded: ({self.origin_x:.3f}, {self.origin_y:.3f}, {np.degrees(self.origin_theta):.1f}°)'
             )
         except Exception as e:
             self.get_logger().warn(f'Could not load origin: {e}')
@@ -304,8 +361,7 @@ class TrajectoryTracker(Node):
         if os.path.exists(self.origin_file):
             os.remove(self.origin_file)
             self.get_logger().info(
-                f'Origin deleted ({self.origin_file}). '
-                'Next movement will define a new (0, 0).'
+                f'Origin deleted ({self.origin_file}). Next movement will define a new (0, 0).'
             )
         else:
             self.get_logger().warn('No saved origin file found — nothing to delete.')
@@ -315,18 +371,17 @@ class TrajectoryTracker(Node):
     # Reference trajectory (circular)
     # ------------------------------------------------------------------
     def get_reference_trajectory(self, t):
-        omega  =  2.0 * np.pi / self.period
-        ref_x  =  self.radius * np.cos(omega * t)
-        ref_y  =  self.radius * np.sin(omega * t)
+        omega = 2.0 * np.pi / self.period
+        ref_x = self.radius * np.cos(omega * t)
+        ref_y = self.radius * np.sin(omega * t)
         ref_vx = -self.radius * omega * np.sin(omega * t)
-        ref_vy =  self.radius * omega * np.cos(omega * t)
+        ref_vy = self.radius * omega * np.cos(omega * t)
         return ref_x, ref_y, ref_vx, ref_vy
 
     # ------------------------------------------------------------------
     # Test mode
     # ------------------------------------------------------------------
     def run_test(self):
-        """Dispatcher — routes to sim or real test implementation."""
         if self.robot == 'sim':
             self._run_test_sim(self.test)
         else:
@@ -337,27 +392,25 @@ class TrajectoryTracker(Node):
 
     def _run_test_sim(self, test):
         """
-        Simulator test — publishes a Pose2D target and waits for /base/goal_reached.
-        Mirrors test_base_sim.py: uses /base/target_pose and /base/goal_reached.
+        Simulator test — publishes Pose2D target and waits for /base/goal_reached.
+        Pose2D.theta is radians by default. If your sim expects degrees, set:
+          -p sim_pose_theta_degrees:=true
         """
         pose = Pose2D()
         if test == 'forward':
             pose.x, pose.y, pose.theta = self.test_distance, 0.0, 0.0
-            self.get_logger().info(f'SIM TEST: Moving forward {self.test_distance:.2f} m...')
         elif test == 'backward':
             pose.x, pose.y, pose.theta = -self.test_distance, 0.0, 0.0
-            self.get_logger().info(f'SIM TEST: Moving backward {self.test_distance:.2f} m...')
         elif test == 'left':
-            pose.x, pose.y, pose.theta = 0.0, 0.0, np.degrees(self.test_angle)
-            self.get_logger().info(f'SIM TEST: Rotating left {np.degrees(self.test_angle):.1f}°...')
+            th = np.degrees(self.test_angle) if self.sim_pose_theta_degrees else self.test_angle
+            pose.x, pose.y, pose.theta = 0.0, 0.0, float(th)
         elif test == 'right':
-            pose.x, pose.y, pose.theta = 0.0, 0.0, -np.degrees(self.test_angle)
-            self.get_logger().info(f'SIM TEST: Rotating right {np.degrees(self.test_angle):.1f}°...')
+            th = -np.degrees(self.test_angle) if self.sim_pose_theta_degrees else -self.test_angle
+            pose.x, pose.y, pose.theta = 0.0, 0.0, float(th)
         else:
             self.get_logger().error(f'Unknown test "{test}". Use: forward, backward, left, right')
             return
 
-        # Publish target, wait for goal_reached (mirrors test_base_sim.py)
         self.sim_goal_reached = False
         self.target_pub.publish(pose)
         timeout = time.time() + 30.0
@@ -367,11 +420,6 @@ class TrajectoryTracker(Node):
             self.get_logger().warn('TEST timed out waiting for /base/goal_reached.')
 
     def _run_test_real(self, test):
-        """
-        Real robot test — sends /cmd_vel and tracks progress via /odom.
-        Mirrors test_base_real.py: time/distance based velocity commands.
-        """
-        # Wait for odometry (mirrors test_base_real.py)
         self.get_logger().info('Waiting for odometry...')
         timeout = time.time() + 5.0
         while not self.odom_received and time.time() < timeout:
@@ -384,65 +432,48 @@ class TrajectoryTracker(Node):
             )
             return
 
-        self.get_logger().info('=' * 50)
         cmd = Twist()
 
         if test in ('forward', 'backward'):
             start_x = self.current_x
             start_y = self.current_y
-            sign    = 1.0 if test == 'forward' else -1.0
+            sign = 1.0 if test == 'forward' else -1.0
             cmd.linear.x = sign * self.max_v
-            self.get_logger().info(
-                f'REAL TEST: {"Forward" if sign > 0 else "Backward"} '
-                f'at {self.max_v:.2f} m/s for {self.test_distance:.2f} m...'
-            )
+
             while True:
-                travelled = np.hypot(self.current_x - start_x,
-                                     self.current_y - start_y)
+                travelled = np.hypot(self.current_x - start_x, self.current_y - start_y)
                 if travelled >= self.test_distance:
                     break
                 self.cmd_vel_pub.publish(cmd)
                 rclpy.spin_once(self, timeout_sec=0.05)
-            self.get_logger().info(
-                f'Distance travelled: {np.hypot(self.current_x - start_x, self.current_y - start_y):.3f} m\n'
-                f'End position: ({self.current_x:.3f}, {self.current_y:.3f})'
-            )
 
         elif test in ('left', 'right'):
-            sign       = 1.0 if test == 'left' else -1.0
+            sign = 1.0 if test == 'left' else -1.0
             cmd.angular.z = sign * self.max_omega
-            rotated    = 0.0
+            rotated = 0.0
             prev_theta = self.current_theta
-            self.get_logger().info(
-                f'REAL TEST: Rotating {"left" if sign > 0 else "right"} '
-                f'{np.degrees(self.test_angle):.1f}° at {self.max_omega:.2f} rad/s...'
-            )
+
             while True:
-                d_theta = self.current_theta - prev_theta
-                d_theta = np.arctan2(np.sin(d_theta), np.cos(d_theta))
-                rotated    += abs(d_theta)
-                prev_theta  = self.current_theta
+                d_theta = wrap_angle(self.current_theta - prev_theta)
+                rotated += abs(d_theta)
+                prev_theta = self.current_theta
                 if rotated >= self.test_angle:
                     break
                 self.cmd_vel_pub.publish(cmd)
                 rclpy.spin_once(self, timeout_sec=0.05)
-            self.get_logger().info(f'Rotated: {np.degrees(rotated):.1f}°')
 
         else:
             self.get_logger().error(f'Unknown test "{test}". Use: forward, backward, left, right')
 
-        self.get_logger().info('=' * 50)
-
     # ------------------------------------------------------------------
     # Go-to-position
     # ------------------------------------------------------------------
-    def go_to_position(self, goal_x: float, goal_y: float,
-                       tolerance: float = None) -> bool:
+    def go_to_position(self, goal_x: float, goal_y: float, tolerance: float = None) -> bool:
         if tolerance is None:
             tolerance = self.goal_tol
 
-        dx       = goal_x - self.current_x
-        dy       = goal_y - self.current_y
+        dx = goal_x - self.current_x
+        dy = goal_y - self.current_y
         distance = np.hypot(dx, dy)
 
         if distance < tolerance:
@@ -454,18 +485,17 @@ class TrajectoryTracker(Node):
             return True
 
         desired_heading = np.arctan2(dy, dx)
-        heading_error   = desired_heading - self.current_theta
-        heading_error   = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+        heading_error = wrap_angle(desired_heading - self.current_theta)
 
-        v     = np.clip(self.kp * distance,            -self.max_v,     self.max_v)
+        v = np.clip(self.kp * distance, -self.max_v, self.max_v)  # distance>=0 => v>=0 in practice
         omega = np.clip(2.0 * self.kp * heading_error, -self.max_omega, self.max_omega)
 
         if abs(heading_error) > np.pi / 4:
             v *= 0.3
 
         cmd = Twist()
-        cmd.linear.x  = v
-        cmd.angular.z = omega
+        cmd.linear.x = float(v)
+        cmd.angular.z = float(omega)
         self.cmd_vel_pub.publish(cmd)
         return False
 
@@ -478,20 +508,6 @@ class TrajectoryTracker(Node):
 
         if self.start_time is None:
             self.start_time = self.get_clock().now()
-            if self.mode != 'test' and self.origin_x is not None:
-                self.get_logger().info(
-                    f'--- Control loop started ---\n'
-                    f'  Origin (raw):    x={self.origin_x:.4f}  y={self.origin_y:.4f}  '
-                    f'theta={np.degrees(self.origin_theta):.2f}°\n'
-                    f'  Current (frame): x={self.current_x:.4f}  y={self.current_y:.4f}  '
-                    f'theta={np.degrees(self.current_theta):.2f}°'
-                )
-            if self.mode == 'goto':
-                gx, gy = self.waypoints[self.waypoint_index]
-                self.get_logger().info(
-                    f'  Goal: x={gx:.4f}  y={gy:.4f}  '
-                    f'distance={np.hypot(gx - self.current_x, gy - self.current_y):.4f} m'
-                )
 
         t = (self.get_clock().now() - self.start_time).nanoseconds * 1e-9
 
@@ -508,14 +524,14 @@ class TrajectoryTracker(Node):
                     self.get_logger().info('All waypoints completed.')
                     self.save_results()
                 return
+
             goal_x, goal_y = self.waypoints[self.waypoint_index]
             if self.go_to_position(goal_x, goal_y):
                 self.waypoint_index += 1
                 if self.waypoint_index < len(self.waypoints):
                     nx, ny = self.waypoints[self.waypoint_index]
                     self.get_logger().info(
-                        f'Moving to waypoint {self.waypoint_index + 1}/'
-                        f'{len(self.waypoints)}: ({nx:.3f}, {ny:.3f})'
+                        f'Moving to waypoint {self.waypoint_index + 1}/{len(self.waypoints)}: ({nx:.3f}, {ny:.3f})'
                     )
             return
 
@@ -536,19 +552,18 @@ class TrajectoryTracker(Node):
         vy_des = self.kp * error_y + ref_vy
 
         theta = self.current_theta
-        v     = vx_des * np.cos(theta) + vy_des * np.sin(theta)
+        v = vx_des * np.cos(theta) + vy_des * np.sin(theta)
 
         desired_heading = np.arctan2(vy_des, vx_des)
-        heading_error   = desired_heading - theta
-        heading_error   = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+        heading_error = wrap_angle(desired_heading - theta)
         omega = 2.0 * self.kp * heading_error
 
-        v     = np.clip(v,     -self.max_v,     self.max_v)
+        v = np.clip(v, -self.max_v, self.max_v)
         omega = np.clip(omega, -self.max_omega, self.max_omega)
 
         cmd = Twist()
-        cmd.linear.x  = v
-        cmd.angular.z = omega
+        cmd.linear.x = float(v)
+        cmd.angular.z = float(omega)
         self.cmd_vel_pub.publish(cmd)
 
         self.data['time'].append(t)
@@ -565,7 +580,6 @@ class TrajectoryTracker(Node):
     def stop_robot(self):
         try:
             self.cmd_vel_pub.publish(Twist())
-            self.get_logger().info('Robot stopped.')
         except Exception:
             pass
 
@@ -575,18 +589,16 @@ class TrajectoryTracker(Node):
         data_dir = os.path.expanduser('~/tidybot_trajectory_data')
         os.makedirs(data_dir, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename  = f'trajectory_kp{self.kp}_{timestamp}.csv'
-        filepath  = os.path.join(data_dir, filename)
+        filename = f'trajectory_kp{self.kp}_{timestamp}.csv'
+        filepath = os.path.join(data_dir, filename)
         with open(filepath, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['time', 'ref_x', 'ref_y', 'actual_x', 'actual_y',
-                             'error_x', 'error_y'])
+            writer.writerow(['time', 'ref_x', 'ref_y', 'actual_x', 'actual_y', 'error_x', 'error_y'])
             for i in range(len(self.data['time'])):
                 writer.writerow([
-                    self.data['time'][i],     self.data['ref_x'][i],
-                    self.data['ref_y'][i],    self.data['actual_x'][i],
-                    self.data['actual_y'][i], self.data['error_x'][i],
-                    self.data['error_y'][i]
+                    self.data['time'][i], self.data['ref_x'][i], self.data['ref_y'][i],
+                    self.data['actual_x'][i], self.data['actual_y'][i],
+                    self.data['error_x'][i], self.data['error_y'][i]
                 ])
         self.get_logger().info(f'Data saved to: {filepath}')
 
