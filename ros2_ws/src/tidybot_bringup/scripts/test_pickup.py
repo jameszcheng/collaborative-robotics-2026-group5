@@ -9,7 +9,10 @@ Usage:
     # Terminal 1
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
 
-    # Terminal 2
+    # Terminal 2 (optional - for object detection)
+    ros2 run tidybot_bringup detect_object_real.py
+
+    # Terminal 3
     ros2 run tidybot_bringup test_pickup.py
 """
 
@@ -19,10 +22,11 @@ import traceback
 
 import numpy as np
 import rclpy
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseStamped
 from interbotix_xs_msgs.msg import JointGroupCommand, JointSingleCommand
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool, Float32, String
 from tidybot_msgs.srv import PlanToTarget
 
 
@@ -36,7 +40,7 @@ class PickupState(Enum):
 
 
 class TestBlockReal(Node):
-    """Plan and execute a real-world block pickup using fixed defaults."""
+    """Plan and execute a real-world block pickup using perception or fixed defaults."""
 
     ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
 
@@ -65,6 +69,17 @@ class TestBlockReal(Node):
         self.joint_states_received = False
         self.create_subscription(JointState, '/joint_states', self._joint_state_cb, 10)
 
+        # Perception subscribers (from detect_object_real.py)
+        self.object_found = False
+        self.object_pose = None
+        self.object_confidence = 0.0
+        self.object_label = ""
+
+        self.create_subscription(Bool, '/perception/object_found', self._object_found_cb, 10)
+        self.create_subscription(PoseStamped, '/perception/object_pose', self._object_pose_cb, 10)
+        self.create_subscription(Float32, '/perception/object_confidence', self._object_confidence_cb, 10)
+        self.create_subscription(String, '/perception/object_label', self._object_label_cb, 10)
+
         # Direct interbotix command topics (same pattern as test_real_hardware.py)
         self.arm_group_pub = self.create_publisher(
             JointGroupCommand, '/right_arm/commands/joint_group', 10
@@ -87,6 +102,41 @@ class TestBlockReal(Node):
 
     def _joint_state_cb(self, _msg: JointState):
         self.joint_states_received = True
+
+    def _object_found_cb(self, msg: Bool):
+        """Callback for /perception/object_found."""
+        self.object_found = msg.data
+
+    def _object_pose_cb(self, msg: PoseStamped):
+        """Callback for /perception/object_pose."""
+        self.object_pose = msg
+
+    def _object_confidence_cb(self, msg: Float32):
+        """Callback for /perception/object_confidence."""
+        self.object_confidence = msg.data
+
+    def _object_label_cb(self, msg: String):
+        """Callback for /perception/object_label."""
+        self.object_label = msg.data
+
+    def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
+        """Wait for a valid object detection with sufficient confidence."""
+        self.get_logger().info(f'Waiting for object detection (min confidence: {min_confidence:.2f})...')
+        start = time.time()
+        while (time.time() - start) < timeout:
+            rclpy.spin_once(self, timeout_sec=0.1)
+            if self.object_found and self.object_pose is not None and self.object_confidence >= min_confidence:
+                self.get_logger().info(
+                    f'Object detected: "{self.object_label}" with confidence {self.object_confidence:.2f}'
+                )
+                self.get_logger().info(
+                    f'Object position: ({self.object_pose.pose.position.x:.3f}, '
+                    f'{self.object_pose.pose.position.y:.3f}, '
+                    f'{self.object_pose.pose.position.z:.3f})'
+                )
+                return True
+            time.sleep(0.1)
+        return False
 
     def wait_for_joint_states(self, timeout: float = 10.0) -> bool:
         start = time.time()
@@ -192,9 +242,18 @@ class TestBlockReal(Node):
             time.sleep(0.1)
 
     def run_state_machine(self) -> bool:
-        x = self.BLOCK_X
-        y = self.BLOCK_Y
-        z = self.BLOCK_Z
+        # Use detected object position if available, otherwise use defaults
+        if self.object_pose is not None and self.object_found:
+            x = self.object_pose.pose.position.x
+            y = self.object_pose.pose.position.y
+            z = self.object_pose.pose.position.z
+            self.get_logger().info('Using detected object position from perception')
+        else:
+            x = self.BLOCK_X
+            y = self.BLOCK_Y
+            z = self.BLOCK_Z
+            self.get_logger().warn('No object detected, using hardcoded defaults')
+
         qw, qx, qy, qz = self.ORIENT_FINGERS_DOWN
 
         approach_pose = self.create_pose(x, y, z + self.APPROACH_HEIGHT, qw, qx, qy, qz)
@@ -202,7 +261,7 @@ class TestBlockReal(Node):
         lift_pose = self.create_pose(x, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
 
         self.get_logger().info('')
-        self.get_logger().info('Default pickup waypoints:')
+        self.get_logger().info('Pickup waypoints:')
         self.get_logger().info(f'  approach: ({x:.3f}, {y:.3f}, {z + self.APPROACH_HEIGHT:.3f})')
         self.get_logger().info(f'  descend:  ({x:.3f}, {y:.3f}, {z + self.GRASP_HEIGHT:.3f})')
         self.get_logger().info(f'  lift:     ({x:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
@@ -256,6 +315,16 @@ def main(args=None):
             node.get_logger().error('IK service not available!')
             node.get_logger().error('Make sure to launch: ros2 launch tidybot_bringup real.launch.py use_planner:=true')
             return 1
+
+        # Try to wait for object detection (optional)
+        node.get_logger().info('')
+        node.get_logger().info('Checking for object detection...')
+        if node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
+            node.get_logger().info('Object detection ready!')
+        else:
+            node.get_logger().warn('No object detected within timeout.')
+            node.get_logger().warn('Will use hardcoded block position instead.')
+            node.get_logger().warn('To use perception, run: ros2 run tidybot_bringup detect_object_real.py')
 
         ok = node.run_state_machine()
         if not ok:
