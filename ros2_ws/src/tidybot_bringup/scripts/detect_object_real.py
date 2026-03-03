@@ -24,6 +24,7 @@ Usage:
   ros2 run tidybot_bringup detect_object_real.py
 """
 
+import os
 import time
 from typing import List, Optional, Tuple
 
@@ -111,6 +112,11 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("conf_threshold", 0.35)
         self.declare_parameter("imgsz", 640)
         self.declare_parameter("publish_debug_image", True)
+        self.declare_parameter("save_debug_image", True)
+        self.declare_parameter(
+            "debug_image_path",
+            os.path.join(os.path.dirname(__file__), "..", "captures", "latest_detection.jpg"),
+        )
 
         self.rgb_topic = self.get_parameter("rgb_topic").value
         self.depth_topic = str(self.get_parameter("depth_topic").value)
@@ -122,6 +128,10 @@ class ObjectDetectorNode(Node):
         self.conf_threshold = float(self.get_parameter("conf_threshold").value)
         self.imgsz = int(self.get_parameter("imgsz").value)
         self.publish_debug_image = bool(self.get_parameter("publish_debug_image").value)
+        self.save_debug_image = bool(self.get_parameter("save_debug_image").value)
+        self.debug_image_path = str(self.get_parameter("debug_image_path").value)
+        if self.save_debug_image:
+            os.makedirs(os.path.dirname(os.path.abspath(self.debug_image_path)), exist_ok=True)
 
         self.bridge = CvBridge()
         self.last_found_state = None
@@ -398,6 +408,9 @@ class ObjectDetectorNode(Node):
         debug_msg = self.bridge.cv2_to_imgmsg(vis, encoding="bgr8")
         debug_msg.header = image_header
         self.debug_pub.publish(debug_msg)
+
+        if self.save_debug_image:
+            cv2.imwrite(self.debug_image_path, vis)
 
 
 def main(args=None):
