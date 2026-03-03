@@ -16,7 +16,7 @@ Publishes:
 
 Subscribes:
   - /camera/color/image_raw (sensor_msgs/Image)
-  - /camera/depth/image_raw (sensor_msgs/Image)
+  - /camera/aligned_depth_to_color/image_raw (sensor_msgs/Image)
   - /camera/color/camera_info (sensor_msgs/CameraInfo)
   - /perception/target_label (std_msgs/String) [optional runtime target override]
 
@@ -102,7 +102,7 @@ class ObjectDetectorNode(Node):
         super().__init__("object_detector")
 
         self.declare_parameter("rgb_topic", "/camera/color/image_raw")
-        self.declare_parameter("depth_topic", "/camera/depth/image_raw")
+        self.declare_parameter("depth_topic", "/camera/aligned_depth_to_color/image_raw")
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
         self.declare_parameter("camera_frame", "camera_color_optical_frame")
         self.declare_parameter("world_frame", "odom")
