@@ -39,6 +39,7 @@ install(PROGRAMS
   scripts/trajectory_tracking.py
   scripts/movement_2.py
   scripts/movement_3.py
+  scripts/movement_4.py
   scripts/safe_movement.py
   scripts/test_movement.py
   DESTINATION lib/${PROJECT_NAME}
