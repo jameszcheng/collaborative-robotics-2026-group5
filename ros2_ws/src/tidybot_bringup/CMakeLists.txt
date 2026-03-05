@@ -41,6 +41,10 @@ install(PROGRAMS
   scripts/trajectory_tracking.py
   scripts/pick_up_block_real.py
   scripts/test_block_reachability.py
+  scripts/movement_2.py
+  scripts/movement_3.py
+  scripts/safe_movement.py
+  scripts/test_movement.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
