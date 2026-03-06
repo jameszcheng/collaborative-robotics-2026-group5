@@ -15,7 +15,7 @@ detect_object_real (YOLO + depth camera + TF)
 navigate_to_object → /cmd_vel → robot moves to standoff position
 ```
 
-## Full Pipeline with NLP + Real Object (4 terminals)
+## Full Pipeline with NLP + Real Object (5 terminals)
 
 **Before starting:** Point the camera at the object (e.g. banana) and leave it in view.
 
@@ -25,7 +25,15 @@ cd ros2_ws && source setup_env.bash
 ros2 launch tidybot_bringup real.launch.py use_navigate_to_object:=true
 ```
 
-**Terminal 2 — Perception (YOLO object detection):**
+**Terminal 2 — Reset odometry origin to current robot position:**
+```bash
+cd ros2_ws && source setup_env.bash
+python3 src/tidybot_bringup/scripts/movement_4.py --ros-args -p mode:=reset_origin -p robot:=real
+```
+> Do this once after hardware is up, before starting navigation. Sets the robot's
+> current position as the odom origin so goal coordinates are relative to here.
+
+**Terminal 3 — Perception (YOLO object detection):**
 ```bash
 cd ros2_ws && source setup_env.bash
 ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
@@ -33,7 +41,7 @@ ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banan
 > The NLP node will update the target label at runtime via `/perception/target_label`,
 > so the initial `target_label` param only matters if you're not using NLP.
 
-**Terminal 3 — NLP (interactive terminal, type or use voice):**
+**Terminal 4 — NLP (interactive terminal, type or use voice):**
 ```bash
 cd ros2_ws && source setup_env.bash
 ros2 run tidybot_control nlp_interface_node
@@ -41,7 +49,7 @@ ros2 run tidybot_control nlp_interface_node
 Then say or type something like: **"go pick up the banana"**
 The NLP parses this as `type: command, object: banana`, triggering navigation.
 
-**Terminal 4 — Monitor navigation:**
+**Terminal 5 — Monitor navigation:**
 ```bash
 cd ros2_ws && source setup_env.bash
 ros2 topic echo /navigation/status
