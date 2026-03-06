@@ -271,7 +271,7 @@ class ObjectDetectorNode(Node):
                 self.world_frame,
                 self.camera_frame,
                 rclpy.time.Time(),
-                timeout=Duration(seconds=1.0),
+                timeout=Duration(seconds=0),
             )
         except Exception as exc:
             self._warn_pose_throttled(
