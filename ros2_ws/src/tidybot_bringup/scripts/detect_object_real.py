@@ -155,7 +155,7 @@ class ObjectDetectorNode(Node):
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos)
         self.create_subscription(Image, self.depth_topic, self.depth_cb, qos)
-        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_cb, qos)
+        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_cb, 10)
         self.create_subscription(String, "/perception/target_label", self.target_label_cb, 10)
 
         self.found_pub = self.create_publisher(Bool, "/perception/object_found", 10)
