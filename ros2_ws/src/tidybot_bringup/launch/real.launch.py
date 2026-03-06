@@ -68,6 +68,7 @@ def launch_setup(context, *args, **kwargs):
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     use_planner = LaunchConfiguration('use_planner').perform(context) == 'true'
     use_microphone = LaunchConfiguration('use_microphone').perform(context) == 'true'
+    use_navigate_to_object = LaunchConfiguration('use_navigate_to_object').perform(context) == 'true'
     use_sim_topics = LaunchConfiguration('use_sim_topics').perform(context) == 'true'
     load_configs = LaunchConfiguration('load_configs').perform(context) == 'true'
 
@@ -331,6 +332,26 @@ def launch_setup(context, *args, **kwargs):
             }]
         ))
 
+    # Navigate-to-object node (bridges NLP commands -> base movement)
+    if use_navigate_to_object:
+        nodes.append(Node(
+            package='tidybot_bringup',
+            executable='navigate_to_object.py',
+            name='navigate_to_object',
+            output='screen',
+            parameters=[{
+                'robot': 'real',
+                'standoff_dist': 0.5,
+                'goal_tolerance': 0.08,
+                'yaw_tolerance': 8.0,
+                'kp': 1.0,
+                'max_v': 0.2,
+                'max_omega': 2.0,
+                'pose_timeout': 3.0,
+                'nav_timeout': 60.0,
+            }]
+        ))
+
     return nodes
 
 
@@ -396,6 +417,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'load_configs', default_value='true',
             description='Load motor configs from YAML files'
+        ),
+        DeclareLaunchArgument(
+            'use_navigate_to_object', default_value='false',
+            description='Launch navigate_to_object node (NLP -> base navigation)'
         ),
 
         # Setup function handles conditional node creation

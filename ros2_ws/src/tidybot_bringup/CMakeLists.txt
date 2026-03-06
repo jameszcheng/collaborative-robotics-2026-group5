@@ -46,6 +46,7 @@ install(PROGRAMS
   scripts/movement_4.py
   scripts/safe_movement.py
   scripts/test_movement.py
+  scripts/navigate_to_object.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
