@@ -229,21 +229,22 @@ class ObjectDetectorNode(Node):
             self.last_pose_warn_time = now
             self.get_logger().warn(text)
 
-    def _depth_at_uv_m(self, u: int, v: int) -> Optional[float]:
+    def _depth_at_uv_m(self, u: int, v: int, radius: int = 10) -> Optional[float]:
         if self.latest_depth is None:
             return None
-        if v < 0 or u < 0:
-            return None
-        if v >= self.latest_depth.shape[0] or u >= self.latest_depth.shape[1]:
+
+        h, w = self.latest_depth.shape[:2]
+        u0 = max(0, u - radius)
+        u1 = min(w, u + radius + 1)
+        v0 = max(0, v - radius)
+        v1 = min(h, v + radius + 1)
+
+        patch = self.latest_depth[v0:v1, u0:u1].astype(np.float32)
+        valid = patch[(patch > 0) & np.isfinite(patch)]
+        if valid.size == 0:
             return None
 
-        raw = self.latest_depth[v, u]
-        if isinstance(raw, np.ndarray):
-            raw = raw.item()
-        z = float(raw)
-        if not np.isfinite(z) or z <= 0.0:
-            return None
-
+        z = float(np.min(valid))  # nearest valid depth in patch
         # RealSense depth is usually 16UC1 in millimeters.
         if self.depth_encoding in ("16uc1", "mono16"):
             z = z / 1000.0
