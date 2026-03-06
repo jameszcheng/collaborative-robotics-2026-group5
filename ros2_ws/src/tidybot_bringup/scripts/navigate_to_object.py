@@ -76,7 +76,7 @@ class NavigateToObject(Node):
         self.declare_parameter('kp',             1.0)
         self.declare_parameter('max_v',          0.2)
         self.declare_parameter('max_omega',      2.0)
-        self.declare_parameter('pose_timeout',   3.0)
+        self.declare_parameter('pose_timeout',   15.0)
         self.declare_parameter('nav_timeout',    60.0)
 
         self.robot         = self.get_parameter('robot').value
