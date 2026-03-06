@@ -408,7 +408,7 @@ def launch_setup(context, *args, **kwargs):
             'kp': 1.0,
             'max_v': 0.2,
             'max_omega': 2.0,
-            'pose_timeout': 3.0,
+            'pose_timeout': 15.0,
             'nav_timeout': 60.0,
         }]
     ))
