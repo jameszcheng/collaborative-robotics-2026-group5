@@ -1,0 +1,24 @@
+# NLP command parsing service
+# Send text input, receive structured robot command or chat response
+
+# Natural language text to parse
+string text_input
+
+---
+
+# Whether parsing succeeded
+bool success
+
+# Response type: "chat", "confirm", "command", or "exit"
+string type
+
+# Robot command fields (populated for "confirm" and "command" types)
+string intent
+string object
+string target
+
+# Friendly message from the robot (populated for all types)
+string message
+
+# Full JSON response for flexibility
+string raw_json

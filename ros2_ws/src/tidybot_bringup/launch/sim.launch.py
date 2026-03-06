@@ -127,7 +127,7 @@ def launch_setup(context, *args, **kwargs):
         parameters=[{'use_sim_time': use_sim_time}]
     )
 
-    return [
+    nodes = [
         robot_state_publisher,
         mujoco_bridge,
         right_arm_controller,
@@ -135,6 +135,8 @@ def launch_setup(context, *args, **kwargs):
         motion_planner,
         rviz,
     ]
+
+    return nodes
 
 
 def generate_launch_description():

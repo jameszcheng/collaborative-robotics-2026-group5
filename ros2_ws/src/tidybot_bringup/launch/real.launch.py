@@ -74,6 +74,7 @@ def launch_setup(context, *args, **kwargs):
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     use_planner = LaunchConfiguration('use_planner').perform(context) == 'true'
     use_microphone = LaunchConfiguration('use_microphone').perform(context) == 'true'
+    use_navigate_to_object = True
     use_sim_topics = LaunchConfiguration('use_sim_topics').perform(context) == 'true'
     load_configs = LaunchConfiguration('load_configs').perform(context) == 'true'
     primary_camera_serial = LaunchConfiguration('primary_camera_serial').perform(context)
@@ -259,12 +260,14 @@ def launch_setup(context, *args, **kwargs):
                 'publish_tf': True,
                 'rgb_camera.color_profile': '640x480x15',
                 'depth_module.depth_profile': '640x480x15',
+                'align_depth.enable': True,
             }],
             remappings=[
                 ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),
                 ('/camera/realsense/depth/image_rect_raw', '/camera/depth/image_raw'),
                 ('/camera/realsense/color/camera_info', '/camera/color/camera_info'),
                 ('/camera/realsense/depth/camera_info', '/camera/depth/camera_info'),
+                ('/camera/realsense/aligned_depth_to_color/image_raw', '/camera/aligned_depth_to_color/image_raw'),
             ]
         ))
 
@@ -390,6 +393,25 @@ def launch_setup(context, *args, **kwargs):
                 'device_index': -1,
             }]
         ))
+
+    # Navigate-to-object node (bridges NLP commands -> base movement)
+    nodes.append(Node(
+        package='tidybot_bringup',
+        executable='navigate_to_object.py',
+        name='navigate_to_object',
+        output='screen',
+        parameters=[{
+            'robot': 'real',
+            'standoff_dist': 0.5,
+            'goal_tolerance': 0.08,
+            'yaw_tolerance': 8.0,
+            'kp': 1.0,
+            'max_v': 0.2,
+            'max_omega': 2.0,
+            'pose_timeout': 15.0,
+            'nav_timeout': 60.0,
+        }]
+    ))
 
     return nodes
 

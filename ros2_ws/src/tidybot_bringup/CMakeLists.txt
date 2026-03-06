@@ -21,6 +21,7 @@ install(DIRECTORY rviz/
 
 # Install Python scripts as executables
 install(PROGRAMS
+  scripts/detect_object_real.py
   scripts/test_base_sim.py
   scripts/test_camera_sim.py
   scripts/test_arms_sim.py
@@ -34,10 +35,19 @@ install(PROGRAMS
   scripts/test_full_robot.py
   scripts/test_tf.py
   scripts/test_planner_real.py
+  scripts/test_microphone.py
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
   scripts/test_pickup.py
+  scripts/pick_up_block_real.py
+  scripts/test_block_reachability.py
+  scripts/movement_2.py
+  scripts/movement_3.py
+  scripts/movement_4.py
+  scripts/safe_movement.py
+  scripts/test_movement.py
+  scripts/navigate_to_object.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
