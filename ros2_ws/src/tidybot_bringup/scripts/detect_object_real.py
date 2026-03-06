@@ -155,7 +155,8 @@ class ObjectDetectorNode(Node):
         qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos)
         self.create_subscription(Image, self.depth_topic, self.depth_cb, qos)
-        self.create_subscription(CameraInfo, self.camera_info_topic, self.camera_info_cb, 10)
+        self._camera_info_sub = self.create_subscription(
+            CameraInfo, self.camera_info_topic, self.camera_info_cb, 10)
         self.create_subscription(String, "/perception/target_label", self.target_label_cb, 10)
 
         self.found_pub = self.create_publisher(Bool, "/perception/object_found", 10)
@@ -216,6 +217,11 @@ class ObjectDetectorNode(Node):
         self.fy = float(msg.k[4])
         self.cx = float(msg.k[2])
         self.cy = float(msg.k[5])
+        self.get_logger().info(
+            f'Camera intrinsics: fx={self.fx:.1f} fy={self.fy:.1f} '
+            f'cx={self.cx:.1f} cy={self.cy:.1f}'
+        )
+        self.destroy_subscription(self._camera_info_sub)
 
     def _warn_pose_throttled(self, text: str):
         now = time.time()
