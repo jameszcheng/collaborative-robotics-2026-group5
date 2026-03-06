@@ -55,8 +55,10 @@ cd ros2_ws && source setup_env.bash
 ros2 topic echo /navigation/status
 ```
 
-> **Tip:** After launching the perception node, give YOLO a few seconds to detect the
-> object before issuing the NLP command. The default `pose_timeout` is only 3 seconds.
+> **Tip:** After launching the perception node, wait until you see the log line:
+> `Camera intrinsics: fx=... fy=...` — this confirms the depth-to-pose pipeline is
+> ready. Then give YOLO a few seconds to detect the object before issuing the NLP
+> command. The default `pose_timeout` is only 3 seconds.
 
 ---
 
