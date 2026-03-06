@@ -2,7 +2,22 @@
 
 Bridges the audio/NLP pipeline with base navigation.
 
-## Full Pipeline (4 terminals)
+## How It Works
+
+```
+Voice/text → nlp_interface_node
+    → /nlp/response            → navigate_to_object  (triggers WAITING_FOR_POSE)
+    → /perception/target_label → detect_object_real  (tells YOLO what to look for)
+
+detect_object_real (YOLO + depth camera + TF)
+    → /perception/object_pose  → navigate_to_object  (locks goal, starts driving)
+
+navigate_to_object → /cmd_vel → robot moves to standoff position
+```
+
+## Full Pipeline with NLP + Real Object (4 terminals)
+
+**Before starting:** Point the camera at the object (e.g. banana) and leave it in view.
 
 **Terminal 1 — Launch hardware:**
 ```bash
@@ -10,25 +25,30 @@ cd ros2_ws && source setup_env.bash
 ros2 launch tidybot_bringup real.launch.py use_navigate_to_object:=true
 ```
 
-**Terminal 2 — NLP + perception nodes (already working pipeline):**
+**Terminal 2 — Perception (YOLO object detection):**
 ```bash
 cd ros2_ws && source setup_env.bash
-# Launch your NLP and perception/detect_object nodes as usual
+ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
 ```
+> The NLP node will update the target label at runtime via `/perception/target_label`,
+> so the initial `target_label` param only matters if you're not using NLP.
 
-**Terminal 3 — Monitor navigation:**
+**Terminal 3 — NLP (interactive terminal, type or use voice):**
 ```bash
-source ros2_ws/install/setup.bash
+cd ros2_ws && source setup_env.bash
+ros2 run tidybot_control nlp_interface_node
+```
+Then say or type something like: **"go pick up the banana"**
+The NLP parses this as `type: command, object: banana`, triggering navigation.
+
+**Terminal 4 — Monitor navigation:**
+```bash
+cd ros2_ws && source setup_env.bash
 ros2 topic echo /navigation/status
-# In a second pane:
-ros2 topic echo /navigation/goal_pose
 ```
 
-**Terminal 4 — Send test commands:**
-```bash
-source ros2_ws/install/setup.bash
-# See manual trigger section below
-```
+> **Tip:** After launching the perception node, give YOLO a few seconds to detect the
+> object before issuing the NLP command. The default `pose_timeout` is only 3 seconds.
 
 ---
 
