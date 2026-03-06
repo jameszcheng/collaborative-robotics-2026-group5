@@ -3,7 +3,7 @@
 Pick up a block on real hardware using a simple state machine.
 
 State machine:
-  approach -> descend -> grasp -> lift -> sleep
+    approach -> descend -> grasp -> lift -> done
 
 Usage:
     # Terminal 1
@@ -35,7 +35,6 @@ class PickupState(Enum):
     DESCEND = auto()
     GRASP = auto()
     LIFT = auto()
-    SLEEP = auto()
     DONE = auto()
 
 
@@ -54,9 +53,8 @@ class TestBlockReal(Node):
     GRASP_HEIGHT = 0.06
     LIFT_HEIGHT = 0.18
 
-    # Fixed arm and sleep pose for this script
+    # Fixed arm pose for this script
     ARM_NAME = 'right'
-    SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
 
     def __init__(self):
         super().__init__('test_block_real')
@@ -230,16 +228,8 @@ class TestBlockReal(Node):
         self.get_logger().info('Closing gripper...')
         self.command_gripper_pwm(-350.0, duration=1.5)
 
-    def send_sleep_pose(self, duration: float = 2.0):
-        self.get_logger().info('Moving arm to sleep pose...')
-        msg = JointGroupCommand()
-        msg.name = 'right_arm'
-        msg.cmd = self.SLEEP_POSE
-
-        start = time.time()
-        while time.time() - start < duration:
-            self.arm_group_pub.publish(msg)
-            time.sleep(0.1)
+    # Note: no sleep/return pose - after lifting the object we keep the arm
+    # extended at the lift pose so the gripper holds the object.
 
     def run_state_machine(self) -> bool:
         # Use detected object position if available, otherwise use defaults
@@ -271,12 +261,12 @@ class TestBlockReal(Node):
         while self.state != PickupState.DONE:
             if self.state == PickupState.APPROACH:
                 self.open_gripper()
-                if not self.plan_and_execute(approach_pose, duration=3.0):
+                if not self.plan_and_execute(approach_pose, duration=5.0):
                     return False
                 self.transition_to(PickupState.DESCEND)
 
             elif self.state == PickupState.DESCEND:
-                if not self.plan_and_execute(grasp_pose, duration=2.0):
+                if not self.plan_and_execute(grasp_pose, duration=5.0):
                     return False
                 self.transition_to(PickupState.GRASP)
 
@@ -285,13 +275,10 @@ class TestBlockReal(Node):
                 self.transition_to(PickupState.LIFT)
 
             elif self.state == PickupState.LIFT:
-                if not self.plan_and_execute(lift_pose, duration=2.0):
+                if not self.plan_and_execute(lift_pose, duration=5.0):
                     return False
-                self.transition_to(PickupState.SLEEP)
-
-            elif self.state == PickupState.SLEEP:
-                self.send_sleep_pose(duration=2.0)
-                self.open_gripper()
+                # Keep the arm at the lifted pose and finish. Do not return
+                # to a sleep pose or open the gripper here so the object stays held.
                 self.transition_to(PickupState.DONE)
 
             time.sleep(0.3)
