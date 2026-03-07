@@ -26,7 +26,7 @@ from geometry_msgs.msg import Pose, PoseStamped
 from interbotix_xs_msgs.msg import JointGroupCommand, JointSingleCommand
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, Float32, String
+from std_msgs.msg import Bool, Float32, Float64MultiArray, String
 from tidybot_msgs.srv import PlanToTarget
 
 
@@ -75,6 +75,11 @@ class TestBlockReal(Node):
         self.create_subscription(PoseStamped, '/perception/object_pose', self._object_pose_cb, 10)
         self.create_subscription(Float32, '/perception/object_confidence', self._object_confidence_cb, 10)
         self.create_subscription(String, '/perception/object_label', self._object_label_cb, 10)
+
+        # Pan-tilt camera control
+        self.pan_tilt_pub = self.create_publisher(
+            Float64MultiArray, '/camera/pan_tilt_cmd', 10
+        )
 
         # Direct interbotix command topics (same pattern as test_real_hardware.py)
         self.arm_group_pub = self.create_publisher(
@@ -263,6 +268,55 @@ class TestBlockReal(Node):
 
         self.get_logger().info(f'{self.arm_name} arm is now in sleep pose.')
 
+    def send_pan_tilt(self, pan: float, tilt: float, duration: float = 1.0):
+        """Send pan-tilt command, publishing repeatedly for the given duration."""
+        msg = Float64MultiArray()
+        msg.data = [pan, tilt]
+        for _ in range(int(duration * 20)):
+            self.pan_tilt_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+    def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
+        """
+        Sweep the camera through several pan/tilt positions looking for an object.
+
+        Tries each position in sequence, waiting up to timeout_per_position seconds
+        at each one. Returns True as soon as an object is detected.
+        """
+        # (pan, tilt, description)  — same convention as test_pan_tilt_real.py
+        search_positions = [
+            (0.0,  0.0,  'center'),
+            (0.0, -0.3,  'tilt up'),
+            (0.0,  0.3,  'tilt down'),
+            (0.0,  0.0,  'center'),
+            (-0.5, 0.0,  'pan left'),
+            (0.5,  0.0,  'pan right'),
+            (0.0,  0.0,  'center'),
+        ]
+
+        self.get_logger().info('No object found — starting camera search sweep...')
+
+        for pan, tilt, description in search_positions:
+            self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
+            self.send_pan_tilt(pan, tilt, duration=1.0)
+
+            # Wait at this position for an object to appear
+            start = time.time()
+            while (time.time() - start) < timeout_per_position:
+                rclpy.spin_once(self, timeout_sec=0.1)
+                if self.object_found and self.object_pose is not None and self.object_confidence >= min_confidence:
+                    self.get_logger().info(
+                        f'  Object found at {description}: "{self.object_label}" '
+                        f'(confidence {self.object_confidence:.2f})'
+                    )
+                    return True
+                time.sleep(0.1)
+
+        # Return camera to center
+        self.send_pan_tilt(0.0, 0.0, duration=1.0)
+        self.get_logger().warn('Camera search sweep complete — no object detected.')
+        return False
+
     def run_state_machine(self) -> bool:
         x = self.object_pose.pose.position.x
         y = self.object_pose.pose.position.y
@@ -331,13 +385,15 @@ def main(args=None):
             node.get_logger().error('Make sure to launch: ros2 launch tidybot_bringup real.launch.py use_planner:=true')
             return 1
 
-        # Wait for object detection (required)
+        # Wait for object detection, then sweep camera if nothing found
         node.get_logger().info('')
         node.get_logger().info('Waiting for object detection...')
-        if not node.wait_for_object_detection(timeout=30.0, min_confidence=0.4):
-            node.get_logger().error('No object detected within timeout. Aborting.')
-            node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
-            return 1
+        if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
+            node.get_logger().warn('No object found in initial window — starting camera search sweep.')
+            if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
+                node.get_logger().error('No object detected after full camera sweep. Aborting.')
+                node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
+                return 1
         node.get_logger().info('Object detection ready!')
 
         ok = node.run_state_machine()
