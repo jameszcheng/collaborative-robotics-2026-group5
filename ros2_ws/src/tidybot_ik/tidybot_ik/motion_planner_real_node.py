@@ -76,7 +76,7 @@ class MotionPlannerRealNode(Node):
         self.declare_parameter('ik_dt', 0.3)  # Step size for numerical IK
         self.declare_parameter('ik_max_iterations', 200)  # More iterations
         self.declare_parameter('position_tolerance', 0.03)  # 3cm
-        self.declare_parameter('orientation_tolerance', 0.1)  # ~6 deg
+        self.declare_parameter('orientation_tolerance', 0.524)  # ~30 deg
         self.declare_parameter('min_collision_distance', 0.03)  # 3cm
         self.declare_parameter('ik_damping', 1e-5)  # Less damping for better convergence
         self.declare_parameter('max_ik_seeds', 7)  # Max number of IK seeds to try

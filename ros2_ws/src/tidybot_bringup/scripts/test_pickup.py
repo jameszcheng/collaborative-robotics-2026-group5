@@ -46,13 +46,13 @@ class TestBlockReal(Node):
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.1
+    APPROACH_HEIGHT = 0.10
     GRASP_HEIGHT = 0.01
-    LIFT_HEIGHT = 0.2
-    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
+    LIFT_HEIGHT = 0.25
+    Y_OFFSET = -0.02  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
-    ARM_NAME = 'right'
+    ARM_NAME = 'left'
 
     def __init__(self):
         super().__init__('test_block_real')
@@ -192,10 +192,10 @@ class TestBlockReal(Node):
         request = PlanToTarget.Request()
         request.arm_name = self.arm_name
         request.target_pose = pose
-        request.use_orientation = False
+        request.use_orientation = True
         request.execute = True
         request.duration = duration
-        request.max_condition_number = 100.0
+        request.max_condition_number = 200.0
 
         pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
         self.get_logger().info(f'Planning+executing {self.arm_name} to {pos_str}')
@@ -228,11 +228,11 @@ class TestBlockReal(Node):
 
     def open_gripper(self):
         self.get_logger().info('Opening gripper...')
-        self.command_gripper_pwm(450.0, duration=1.5)
+        self.command_gripper_pwm(450.0, duration=3.0)
 
     def close_gripper(self):
         self.get_logger().info('Closing gripper...')
-        self.command_gripper_pwm(-350.0, duration=1.5)
+        self.command_gripper_pwm(-350.0, duration=3.0)
 
     def go_to_sleep(self, max_joint_speed: float = 0.5):
         """Send arm to sleep pose using smooth cosine interpolation."""
