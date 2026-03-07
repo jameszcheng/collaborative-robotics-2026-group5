@@ -104,6 +104,8 @@ class ObjectDetectorNode(Node):
 
         self.declare_parameter("rgb_topic", "/camera/color/image_raw")
         self.declare_parameter("depth_topic", "/camera/aligned_depth_to_color/image_raw")
+        self.declare_parameter("depth_fallback_topic", "/camera/depth/image_raw")
+        self.declare_parameter("depth_fallback_timeout", 3.0)
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
         self.declare_parameter("camera_frame", "camera_color_optical_frame")
         self.declare_parameter("world_frame", "base_link")
@@ -120,6 +122,8 @@ class ObjectDetectorNode(Node):
 
         self.rgb_topic = self.get_parameter("rgb_topic").value
         self.depth_topic = str(self.get_parameter("depth_topic").value)
+        self.depth_fallback_topic = str(self.get_parameter("depth_fallback_topic").value)
+        self.depth_fallback_timeout = float(self.get_parameter("depth_fallback_timeout").value)
         self.camera_info_topic = str(self.get_parameter("camera_info_topic").value)
         self.camera_frame = str(self.get_parameter("camera_frame").value)
         self.world_frame = str(self.get_parameter("world_frame").value)
@@ -152,9 +156,19 @@ class ObjectDetectorNode(Node):
         self.model_names = {}
         self._init_model()
 
-        qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
-        self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos)
-        self.create_subscription(Image, self.depth_topic, self.depth_cb, qos)
+        qos_best_effort = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_reliable = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
+        self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos_best_effort)
+
+        # Subscribe to both aligned and raw depth; use whichever arrives
+        self._depth_received = False
+        self._depth_fallback_active = False
+        self._depth_sub = self.create_subscription(
+            Image, self.depth_topic, self.depth_cb, qos_best_effort)
+        self._depth_fallback_sub = self.create_subscription(
+            Image, self.depth_fallback_topic, self._depth_fallback_cb, qos_reliable)
+        self._depth_start_time = time.time()
+
         self._camera_info_sub = self.create_subscription(
             CameraInfo, self.camera_info_topic, self.camera_info_cb, 10)
         self.create_subscription(String, "/perception/target_label", self.target_label_cb, 10)
@@ -163,7 +177,7 @@ class ObjectDetectorNode(Node):
         self.label_pub = self.create_publisher(String, "/perception/object_label", 10)
         self.conf_pub = self.create_publisher(Float32, "/perception/object_confidence", 10)
         self.bbox_pub = self.create_publisher(Int32MultiArray, "/perception/object_bbox", 10)
-        self.debug_pub = self.create_publisher(Image, "/perception/object_debug_image", qos)
+        self.debug_pub = self.create_publisher(Image, "/perception/object_debug_image", qos_best_effort)
         self.pose_pub = self.create_publisher(PoseStamped, "/perception/object_pose", 10)
 
         self.get_logger().info("Object detector started")
@@ -205,12 +219,35 @@ class ObjectDetectorNode(Node):
             self.model_names = {}
 
     def depth_cb(self, msg: Image):
+        """Callback for primary (aligned) depth topic."""
+        if not self._depth_received:
+            self._depth_received = True
+            self.get_logger().info(f"Receiving depth from primary topic: {self.depth_topic}")
         try:
             self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             self.depth_encoding = str(msg.encoding).lower()
         except Exception as exc:
             self.latest_depth = None
             self._warn_pose_throttled(f"Depth conversion failed: {exc}")
+
+    def _depth_fallback_cb(self, msg: Image):
+        """Callback for fallback (raw) depth topic. Only used if primary never arrives."""
+        if self._depth_received:
+            return  # primary topic is working, ignore fallback
+        elapsed = time.time() - self._depth_start_time
+        if elapsed < self.depth_fallback_timeout:
+            return  # still waiting for primary
+        if not self._depth_fallback_active:
+            self._depth_fallback_active = True
+            self.get_logger().warn(
+                f"No data from {self.depth_topic} after {self.depth_fallback_timeout:.0f}s, "
+                f"falling back to {self.depth_fallback_topic}")
+        try:
+            self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+            self.depth_encoding = str(msg.encoding).lower()
+        except Exception as exc:
+            self.latest_depth = None
+            self._warn_pose_throttled(f"Depth fallback conversion failed: {exc}")
 
     def camera_info_cb(self, msg: CameraInfo):
         self.fx = float(msg.k[0])

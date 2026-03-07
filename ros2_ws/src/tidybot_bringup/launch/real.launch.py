@@ -260,6 +260,7 @@ def launch_setup(context, *args, **kwargs):
                 'publish_tf': True,
                 'rgb_camera.color_profile': '640x480x15',
                 'depth_module.depth_profile': '640x480x15',
+                'enable_sync': True,
                 'align_depth.enable': True,
             }],
             remappings=[

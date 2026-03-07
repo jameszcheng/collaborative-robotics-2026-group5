@@ -49,10 +49,10 @@ class TestBlockReal(Node):
     APPROACH_HEIGHT = 0.10
     GRASP_HEIGHT = 0.01
     LIFT_HEIGHT = 0.25
-    Y_OFFSET = -0.02  # forward offset, negative = further from robot (meters)
+    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
-    ARM_NAME = 'left'
+    ARM_NAME = 'right'
 
     def __init__(self):
         super().__init__('test_block_real')
