@@ -48,6 +48,7 @@ install(PROGRAMS
   scripts/safe_movement.py
   scripts/test_movement.py
   scripts/navigate_to_object.py
+  scripts/go_to_sleep.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
