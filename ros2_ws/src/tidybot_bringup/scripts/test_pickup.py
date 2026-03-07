@@ -286,12 +286,12 @@ class TestBlockReal(Node):
         # (pan, tilt, description)  — same convention as test_pan_tilt_real.py
         search_positions = [
             (0.0,  0.0,  'center'),
-            (0.0, -0.3,  'tilt up'),
             (0.0,  0.3,  'tilt down'),
-            (0.0,  0.0,  'center'),
             (-0.5, 0.0,  'pan left'),
             (0.5,  0.0,  'pan right'),
             (0.0,  0.0,  'center'),
+            (-0.5, 0.0,  'pan left'),
+            (0.5,  0.0,  'pan right'),
         ]
 
         self.get_logger().info('No object found — starting camera search sweep...')
