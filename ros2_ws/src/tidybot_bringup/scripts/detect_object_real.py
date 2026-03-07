@@ -4,7 +4,7 @@ Object Detection Node (Real Hardware, 2D + optional 3D pose).
 
 Runs YOLO on RGB images and publishes whether a target object is found
 plus a 2D bounding box. If depth + CameraInfo + TF are available, also
-publishes a 3D point pose in a world frame.
+publishes a 3D point pose in the robot base_link frame.
 
 Publishes:
   - /perception/object_found (std_msgs/Bool)
@@ -106,7 +106,7 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("depth_topic", "/camera/aligned_depth_to_color/image_raw")
         self.declare_parameter("camera_info_topic", "/camera/color/camera_info")
         self.declare_parameter("camera_frame", "camera_color_optical_frame")
-        self.declare_parameter("world_frame", "odom")
+        self.declare_parameter("world_frame", "base_link")
         self.declare_parameter("target_label", "apple")
         self.declare_parameter("model_path", "yolov8n.pt")
         self.declare_parameter("conf_threshold", 0.35)
