@@ -46,9 +46,10 @@ class TestBlockReal(Node):
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.15
-    GRASP_HEIGHT = 0.06
+    APPROACH_HEIGHT = 0.1
+    GRASP_HEIGHT = 0.01
     LIFT_HEIGHT = 0.2
+    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
     ARM_NAME = 'right'
@@ -227,7 +228,7 @@ class TestBlockReal(Node):
 
     def open_gripper(self):
         self.get_logger().info('Opening gripper...')
-        self.command_gripper_pwm(350.0, duration=1.5)
+        self.command_gripper_pwm(450.0, duration=1.5)
 
     def close_gripper(self):
         self.get_logger().info('Closing gripper...')
@@ -276,14 +277,20 @@ class TestBlockReal(Node):
             self.pan_tilt_pub.publish(msg)
             rclpy.spin_once(self, timeout_sec=0.05)
 
+    def _check_detection(self, min_confidence: float = 0.4) -> bool:
+        """Spin once and return True if a valid detection is available."""
+        rclpy.spin_once(self, timeout_sec=0.05)
+        return (self.object_found
+                and self.object_pose is not None
+                and self.object_confidence >= min_confidence)
+
     def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
         """
         Sweep the camera through several pan/tilt positions looking for an object.
 
-        Tries each position in sequence, waiting up to timeout_per_position seconds
-        at each one. Returns True as soon as an object is detected.
+        Checks for detections continuously — during pan-tilt movement and while
+        waiting at each position. Returns True as soon as an object is detected.
         """
-        # (pan, tilt, description)  — same convention as test_pan_tilt_real.py
         search_positions = [
             (0.0,  0.0,  'center'),
             (0.0,  0.3,  'tilt down'),
@@ -298,19 +305,29 @@ class TestBlockReal(Node):
 
         for pan, tilt, description in search_positions:
             self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
-            self.send_pan_tilt(pan, tilt, duration=1.0)
 
-            # Wait at this position for an object to appear
+            # Move camera while checking for detections
+            msg = Float64MultiArray()
+            msg.data = [pan, tilt]
+            for _ in range(20):  # ~1 second of movement
+                self.pan_tilt_pub.publish(msg)
+                if self._check_detection(min_confidence):
+                    self.get_logger().info(
+                        f'  Object found during move to {description}: "{self.object_label}" '
+                        f'(confidence {self.object_confidence:.2f})')
+                    return True
+                time.sleep(0.05)
+
+            # Wait at this position, checking continuously
             start = time.time()
             while (time.time() - start) < timeout_per_position:
-                rclpy.spin_once(self, timeout_sec=0.1)
-                if self.object_found and self.object_pose is not None and self.object_confidence >= min_confidence:
+                self.pan_tilt_pub.publish(msg)
+                if self._check_detection(min_confidence):
                     self.get_logger().info(
                         f'  Object found at {description}: "{self.object_label}" '
-                        f'(confidence {self.object_confidence:.2f})'
-                    )
+                        f'(confidence {self.object_confidence:.2f})')
                     return True
-                time.sleep(0.1)
+                time.sleep(0.05)
 
         # Return camera to center
         self.send_pan_tilt(0.0, 0.0, duration=1.0)
@@ -319,9 +336,9 @@ class TestBlockReal(Node):
 
     def run_state_machine(self) -> bool:
         x = self.object_pose.pose.position.x
-        y = self.object_pose.pose.position.y
+        y = self.object_pose.pose.position.y + self.Y_OFFSET
         z = self.object_pose.pose.position.z
-        self.get_logger().info('Using detected object position from perception')
+        self.get_logger().info(f'Using detected object position from perception (y_offset={self.Y_OFFSET})')
 
         qw, qx, qy, qz = self.ORIENT_FINGERS_DOWN
 
