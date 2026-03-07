@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pick up a block on real hardware using a simple state machine.
+Pick up a block on real hardware using vision-based object detection.
 
 State machine:
     approach -> descend -> grasp -> lift -> done
@@ -9,11 +9,11 @@ Usage:
     # Terminal 1
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
 
-    # Terminal 2 (optional - for object detection)
-    ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
+    # Terminal 2 (required - for object detection)
+    ros2 run tidybot_bringup detect_object_real.py
 
     # Terminal 3
-    ros2 run tidybot_bringup test_pickup.py
+    ros2 run tidybot_bringup vision_pickup.py
 """
 
 import time
@@ -35,31 +35,24 @@ class PickupState(Enum):
     DESCEND = auto()
     GRASP = auto()
     LIFT = auto()
-    SLEEP = auto()
     DONE = auto()
 
 
-class TestBlockReal(Node):
-    """Plan and execute a real-world block pickup using perception or fixed defaults."""
+class VisionPickup(Node):
+    """Plan and execute a real-world block pickup using perception."""
 
     ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
-    SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
-
-    # Default block target in base_link frame (meters)
-    BLOCK_X = -0.10
-    BLOCK_Y = -0.35
-    BLOCK_Z = 0.48
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.15
+    APPROACH_HEIGHT = 0.12
     GRASP_HEIGHT = 0.06
-    LIFT_HEIGHT = 0.2
+    LIFT_HEIGHT = 0.18
 
     # Fixed arm pose for this script
-    ARM_NAME = 'left'
+    ARM_NAME = 'right'
 
     def __init__(self):
-        super().__init__('test_block_real')
+        super().__init__('vision_pickup')
         self.arm_name = self.ARM_NAME
         self.state = PickupState.APPROACH
 
@@ -67,7 +60,6 @@ class TestBlockReal(Node):
 
         # Joint-state health check (for startup diagnostics)
         self.joint_states_received = False
-        self._latest_positions = {}
         self.create_subscription(JointState, '/joint_states', self._joint_state_cb, 10)
 
         # Perception subscribers (from detect_object_real.py)
@@ -83,14 +75,14 @@ class TestBlockReal(Node):
 
         # Direct interbotix command topics (same pattern as test_real_hardware.py)
         self.arm_group_pub = self.create_publisher(
-            JointGroupCommand, f'/{self.arm_name}_arm/commands/joint_group', 10
+            JointGroupCommand, '/right_arm/commands/joint_group', 10
         )
         self.gripper_pub = self.create_publisher(
-            JointSingleCommand, f'/{self.arm_name}_arm/commands/joint_single', 10
+            JointSingleCommand, '/right_arm/commands/joint_single', 10
         )
 
         self.get_logger().info('=' * 60)
-        self.get_logger().info('TidyBot2 Real Block Pickup Test (State Machine)')
+        self.get_logger().info('TidyBot2 Vision-Based Block Pickup')
         self.get_logger().info('=' * 60)
         self.get_logger().info(f'Arm: {self.arm_name}')
 
@@ -101,10 +93,8 @@ class TestBlockReal(Node):
 
         self.get_logger().info('Service connected.')
 
-    def _joint_state_cb(self, msg: JointState):
+    def _joint_state_cb(self, _msg: JointState):
         self.joint_states_received = True
-        for name, pos in zip(msg.name, msg.position):
-            self._latest_positions[name] = pos
 
     def _object_found_cb(self, msg: Bool):
         """Callback for /perception/object_found."""
@@ -191,7 +181,7 @@ class TestBlockReal(Node):
         request = PlanToTarget.Request()
         request.arm_name = self.arm_name
         request.target_pose = pose
-        request.use_orientation = False
+        request.use_orientation = True
         request.execute = True
         request.duration = duration
         request.max_condition_number = 100.0
@@ -217,7 +207,7 @@ class TestBlockReal(Node):
     def command_gripper_pwm(self, pwm: float, duration: float = 1.0):
         """Command right gripper via JointSingleCommand PWM (test_real_hardware.py style)."""
         msg = JointSingleCommand()
-        msg.name = f'{self.arm_name}_gripper'
+        msg.name = 'right_gripper'
         msg.cmd = float(pwm)
 
         start = time.time()
@@ -233,53 +223,15 @@ class TestBlockReal(Node):
         self.get_logger().info('Closing gripper...')
         self.command_gripper_pwm(-350.0, duration=1.5)
 
-    def go_to_sleep(self, max_joint_speed: float = 0.5):
-        """Send arm to sleep pose using smooth cosine interpolation."""
-        self.get_logger().info(f'Moving {self.arm_name} arm to sleep pose...')
-        rclpy.spin_once(self, timeout_sec=0.1)
-
-        # Read current positions from joint states
-        joint_names = [
-            f'{self.arm_name}_waist', f'{self.arm_name}_shoulder', f'{self.arm_name}_elbow',
-            f'{self.arm_name}_forearm_roll', f'{self.arm_name}_wrist_angle', f'{self.arm_name}_wrist_rotate',
-        ]
-        current = np.array([self._latest_positions.get(j, 0.0) for j in joint_names])
-        target = np.array(self.SLEEP_POSE)
-
-        max_diff = np.max(np.abs(target - current))
-        duration = max(max_diff / max_joint_speed, 1.0)
-
-        rate_hz = 50.0
-        dt = 1.0 / rate_hz
-        num_steps = max(int(duration * rate_hz), 1)
-
-        for i in range(num_steps + 1):
-            t = i / num_steps
-            alpha = 0.5 * (1 - np.cos(np.pi * t))
-            q = current + alpha * (target - current)
-
-            cmd = JointGroupCommand()
-            cmd.name = f'{self.arm_name}_arm'
-            cmd.cmd = q.tolist()
-            self.arm_group_pub.publish(cmd)
-
-            if i < num_steps:
-                time.sleep(dt)
-
-        self.get_logger().info(f'{self.arm_name} arm is now in sleep pose.')
-
     def run_state_machine(self) -> bool:
-        # Use detected object position if available, otherwise use defaults
-        if self.object_pose is not None and self.object_found:
-            x = self.object_pose.pose.position.x
-            y = self.object_pose.pose.position.y
-            z = self.object_pose.pose.position.z
-            self.get_logger().info('Using detected object position from perception')
-        else:
-            x = self.BLOCK_X
-            y = self.BLOCK_Y
-            z = self.BLOCK_Z
-            self.get_logger().warn('No object detected, using hardcoded defaults')
+        if self.object_pose is None or not self.object_found:
+            self.get_logger().error('No object detected. Cannot proceed without a valid object pose.')
+            return False
+
+        x = self.object_pose.pose.position.x
+        y = self.object_pose.pose.position.y
+        z = self.object_pose.pose.position.z
+        self.get_logger().info('Using detected object position from perception')
 
         qw, qx, qy, qz = self.ORIENT_FINGERS_DOWN
 
@@ -298,12 +250,12 @@ class TestBlockReal(Node):
         while self.state != PickupState.DONE:
             if self.state == PickupState.APPROACH:
                 self.open_gripper()
-                if not self.plan_and_execute(approach_pose, duration=10.0):
+                if not self.plan_and_execute(approach_pose, duration=5.0):
                     return False
                 self.transition_to(PickupState.DESCEND)
 
             elif self.state == PickupState.DESCEND:
-                if not self.plan_and_execute(grasp_pose, duration=10.0):
+                if not self.plan_and_execute(grasp_pose, duration=5.0):
                     return False
                 self.transition_to(PickupState.GRASP)
 
@@ -312,13 +264,10 @@ class TestBlockReal(Node):
                 self.transition_to(PickupState.LIFT)
 
             elif self.state == PickupState.LIFT:
-                if not self.plan_and_execute(lift_pose, duration=10.0):
+                if not self.plan_and_execute(lift_pose, duration=5.0):
                     return False
-                self.transition_to(PickupState.SLEEP)
-
-            elif self.state == PickupState.SLEEP:
-                self.open_gripper()
-                self.go_to_sleep()
+                # Keep the arm at the lifted pose and finish. Do not return
+                # to a sleep pose or open the gripper here so the object stays held.
                 self.transition_to(PickupState.DONE)
 
             time.sleep(0.3)
@@ -329,7 +278,7 @@ class TestBlockReal(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TestBlockReal()
+    node = VisionPickup()
 
     try:
         node.get_logger().info('Waiting for joint states...')
@@ -343,15 +292,15 @@ def main(args=None):
             node.get_logger().error('Make sure to launch: ros2 launch tidybot_bringup real.launch.py use_planner:=true')
             return 1
 
-        # Try to wait for object detection (optional)
+        # Object detection is required
         node.get_logger().info('')
-        node.get_logger().info('Checking for object detection...')
-        if node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
-            node.get_logger().info('Object detection ready!')
-        else:
-            node.get_logger().warn('No object detected within timeout.')
-            node.get_logger().warn('Will use hardcoded block position instead.')
-            node.get_logger().warn('To use perception, run: ros2 run tidybot_bringup detect_object_real.py')
+        node.get_logger().info('Waiting for object detection...')
+        if not node.wait_for_object_detection(timeout=30.0, min_confidence=0.4):
+            node.get_logger().error('No object detected within timeout. Aborting.')
+            node.get_logger().error('Make sure to run: ros2 run tidybot_bringup detect_object_real.py')
+            return 1
+
+        node.get_logger().info('Object detection ready!')
 
         ok = node.run_state_machine()
         if not ok:
