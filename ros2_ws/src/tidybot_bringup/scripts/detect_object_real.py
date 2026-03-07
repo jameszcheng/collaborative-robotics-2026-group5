@@ -115,7 +115,7 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("save_debug_image", True)
         self.declare_parameter(
             "debug_image_path",
-            os.path.join(os.path.dirname(__file__), "..", "captures", "latest_detection.jpg"),
+            os.path.join(os.getcwd(), "captures", "latest_detection.jpg"),
         )
 
         self.rgb_topic = self.get_parameter("rgb_topic").value
