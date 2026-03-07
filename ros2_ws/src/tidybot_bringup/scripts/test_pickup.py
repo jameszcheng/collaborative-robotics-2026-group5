@@ -45,18 +45,13 @@ class TestBlockReal(Node):
     ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
-    # Default block target in base_link frame (meters)
-    BLOCK_X = -0.10
-    BLOCK_Y = -0.35
-    BLOCK_Z = 0.48
-
     # Waypoint offsets from grasp target (meters)
     APPROACH_HEIGHT = 0.15
     GRASP_HEIGHT = 0.06
     LIFT_HEIGHT = 0.2
 
     # Fixed arm pose for this script
-    ARM_NAME = 'left'
+    ARM_NAME = 'right'
 
     def __init__(self):
         super().__init__('test_block_real')
@@ -269,17 +264,10 @@ class TestBlockReal(Node):
         self.get_logger().info(f'{self.arm_name} arm is now in sleep pose.')
 
     def run_state_machine(self) -> bool:
-        # Use detected object position if available, otherwise use defaults
-        if self.object_pose is not None and self.object_found:
-            x = self.object_pose.pose.position.x
-            y = self.object_pose.pose.position.y
-            z = self.object_pose.pose.position.z
-            self.get_logger().info('Using detected object position from perception')
-        else:
-            x = self.BLOCK_X
-            y = self.BLOCK_Y
-            z = self.BLOCK_Z
-            self.get_logger().warn('No object detected, using hardcoded defaults')
+        x = self.object_pose.pose.position.x
+        y = self.object_pose.pose.position.y
+        z = self.object_pose.pose.position.z
+        self.get_logger().info('Using detected object position from perception')
 
         qw, qx, qy, qz = self.ORIENT_FINGERS_DOWN
 
@@ -343,15 +331,14 @@ def main(args=None):
             node.get_logger().error('Make sure to launch: ros2 launch tidybot_bringup real.launch.py use_planner:=true')
             return 1
 
-        # Try to wait for object detection (optional)
+        # Wait for object detection (required)
         node.get_logger().info('')
-        node.get_logger().info('Checking for object detection...')
-        if node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
-            node.get_logger().info('Object detection ready!')
-        else:
-            node.get_logger().warn('No object detected within timeout.')
-            node.get_logger().warn('Will use hardcoded block position instead.')
-            node.get_logger().warn('To use perception, run: ros2 run tidybot_bringup detect_object_real.py')
+        node.get_logger().info('Waiting for object detection...')
+        if not node.wait_for_object_detection(timeout=30.0, min_confidence=0.4):
+            node.get_logger().error('No object detected within timeout. Aborting.')
+            node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
+            return 1
+        node.get_logger().info('Object detection ready!')
 
         ok = node.run_state_machine()
         if not ok:
