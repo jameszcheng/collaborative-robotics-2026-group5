@@ -115,7 +115,7 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("save_debug_image", True)
         self.declare_parameter(
             "debug_image_path",
-            os.path.join(os.path.dirname(__file__), "..", "captures", "latest_detection.jpg"),
+            os.path.join(os.getcwd(), "captures", "latest_detection.jpg"),
         )
 
         self.rgb_topic = self.get_parameter("rgb_topic").value
@@ -250,17 +250,18 @@ class ObjectDetectorNode(Node):
             z = z / 1000.0
         return z
 
-    def _publish_pose(self, x: int, y: int, w: int, h: int, image_header):
+    def _publish_pose(self, x: int, y: int, w: int, h: int, image_header) -> Optional[Tuple[float, float, float]]:
+        """Publish 3D pose and return (x, y, z) in world frame, or None."""
         if any(k is None for k in [self.fx, self.fy, self.cx, self.cy]):
             self._warn_pose_throttled("No camera intrinsics yet; skipping /perception/object_pose.")
-            return
+            return None
 
         u = int(round(x + 0.5 * w))
         v = int(round(y + 0.5 * h))
         z_m = self._depth_at_uv_m(u, v)
         if z_m is None:
             self._warn_pose_throttled("Invalid depth at bbox center; skipping /perception/object_pose.")
-            return
+            return None
 
         x_cam, y_cam, z_cam = deproject_uvz_to_camera_xyz(
             float(u), float(v), z_m, self.fx, self.fy, self.cx, self.cy
@@ -277,7 +278,7 @@ class ObjectDetectorNode(Node):
             self._warn_pose_throttled(
                 f"TF lookup failed ({self.world_frame} <- {self.camera_frame}): {exc}"
             )
-            return
+            return None
 
         x_w, y_w, z_w = transform_point(tf_msg, (x_cam, y_cam, z_cam))
 
@@ -289,6 +290,7 @@ class ObjectDetectorNode(Node):
         pose_msg.pose.position.z = float(z_w)
         pose_msg.pose.orientation.w = 1.0
         self.pose_pub.publish(pose_msg)
+        return (x_w, y_w, z_w)
 
     def rgb_cb(self, msg: Image):
         if self.model is None:
@@ -323,9 +325,9 @@ class ObjectDetectorNode(Node):
         self.publish_label(label)
         self.publish_confidence(conf)
         self.publish_bbox((x, y, w, h))
-        self._publish_pose(x, y, w, h, msg.header)
+        pose_xyz = self._publish_pose(x, y, w, h, msg.header)
         if self.publish_debug_image:
-            self.publish_debug(bgr, detection, msg.header)
+            self.publish_debug(bgr, detection, msg.header, pose_xyz)
 
         now = time.time()
         if now - self.last_log_time > 1.0:
@@ -404,6 +406,7 @@ class ObjectDetectorNode(Node):
         bgr: "cv2.typing.MatLike",
         detection: Optional[Tuple[int, int, int, int, float, str]],
         image_header,
+        pose_xyz: Optional[Tuple[float, float, float]] = None,
     ):
         vis = bgr.copy()
         if detection is not None:
@@ -411,6 +414,9 @@ class ObjectDetectorNode(Node):
             cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 220, 0), 2)
             text = f"{label} {conf:.2f}"
             cv2.putText(vis, text, (x, max(25, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2)
+            if pose_xyz is not None:
+                pose_text = f"({pose_xyz[0]:.2f}, {pose_xyz[1]:.2f}, {pose_xyz[2]:.2f})"
+                cv2.putText(vis, pose_text, (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 180, 255), 2)
 
         debug_msg = self.bridge.cv2_to_imgmsg(vis, encoding="bgr8")
         debug_msg.header = image_header
