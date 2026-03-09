@@ -222,6 +222,7 @@ class ObjectDetectorNode(Node):
         """Callback for primary (aligned) depth topic."""
         if not self._depth_received:
             self._depth_received = True
+            self._depth_fallback_active = False  # clear fallback flag
             self.get_logger().info(f"Receiving depth from primary topic: {self.depth_topic}")
         try:
             self.latest_depth = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
@@ -281,7 +282,7 @@ class ObjectDetectorNode(Node):
         if valid.size == 0:
             return None
 
-        z = float(np.min(valid))  # nearest valid depth in patch
+        z = float(np.median(valid))  # median for robustness against noise
         # RealSense depth is usually 16UC1 in millimeters.
         if self.depth_encoding in ("16uc1", "mono16"):
             z = z / 1000.0
@@ -369,8 +370,12 @@ class ObjectDetectorNode(Node):
         now = time.time()
         if now - self.last_log_time > 1.0:
             self.last_log_time = now
+            pose_str = ""
+            if pose_xyz is not None:
+                pose_str = f" pose=({pose_xyz[0]:.3f}, {pose_xyz[1]:.3f}, {pose_xyz[2]:.3f}) in {self.world_frame}"
+            fallback_str = " [RAW DEPTH - positions may be inaccurate!]" if self._depth_fallback_active else ""
             self.get_logger().info(
-                f"Detected '{label}' conf={conf:.2f} bbox=({x}, {y}, {w}, {h})"
+                f"Detected '{label}' conf={conf:.2f} bbox=({x}, {y}, {w}, {h}){pose_str}{fallback_str}"
             )
 
     def detect_target(self, bgr: "cv2.typing.MatLike") -> Optional[Tuple[int, int, int, int, float, str]]:

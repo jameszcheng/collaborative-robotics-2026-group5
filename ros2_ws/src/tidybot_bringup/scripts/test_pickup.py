@@ -49,7 +49,7 @@ class TestBlockReal(Node):
     APPROACH_HEIGHT = 0.10
     GRASP_HEIGHT = 0.01
     LIFT_HEIGHT = 0.25
-    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
+    Y_OFFSET = 0.0  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
     ARM_NAME = 'right'

@@ -122,6 +122,14 @@ def launch_setup(context, *args, **kwargs):
         }]
     ))
 
+    # Static transform: odom -> base_link (URDF floating joint not supported by robot_state_publisher)
+    nodes.append(Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='odom_to_base_link',
+        arguments=['0', '0', '0', '0', '0', '0', 'odom', 'base_link'],
+    ))
+
     # Joint state aggregator - combines joint states from arms and pan-tilt into /joint_states
     # This is needed because each xs_sdk publishes to its own namespace
     if use_arms:
