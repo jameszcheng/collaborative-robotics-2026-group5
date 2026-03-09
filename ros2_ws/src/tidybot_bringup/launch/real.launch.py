@@ -5,9 +5,8 @@ Launches:
 - Phoenix 6 mobile base driver
 - Interbotix xs_sdk arm drivers (dual U2D2 setup)
 - Pan-tilt RealSense camera driver
-- Top sensor stack selected by sensor_mode:=lidar|top_camera
-  - lidar: launches RPLIDAR node
-  - top_camera: launches second RealSense node
+- Optional top RealSense camera driver
+- Optional RPLIDAR node
 - Robot state publisher (URDF + TF)
 - Image compression (optional, for remote clients)
 - Arm/gripper wrappers for sim-compatible topics (optional, on by default)
@@ -20,7 +19,8 @@ Hardware Setup (Dual U2D2):
 Usage:
     ros2 launch tidybot_bringup real.launch.py
     ros2 launch tidybot_bringup real.launch.py use_rviz:=false
-    ros2 launch tidybot_bringup real.launch.py sensor_mode:=top_camera
+    ros2 launch tidybot_bringup real.launch.py use_top_camera:=true
+    ros2 launch tidybot_bringup real.launch.py use_lidar:=true use_top_camera:=true
     ros2 launch tidybot_bringup real.launch.py use_base:=false  # Disable base
     ros2 launch tidybot_bringup real.launch.py use_left_arm:=false  # Right arm only
     ros2 launch tidybot_bringup real.launch.py use_sim_topics:=false  # Disable sim-compatible topics
@@ -69,7 +69,6 @@ def launch_setup(context, *args, **kwargs):
     use_camera = LaunchConfiguration('use_camera').perform(context) == 'true'
     use_top_camera = LaunchConfiguration('use_top_camera').perform(context) == 'true'
     use_lidar = LaunchConfiguration('use_lidar').perform(context) == 'true'
-    sensor_mode = LaunchConfiguration('sensor_mode').perform(context)
     use_compression = LaunchConfiguration('use_compression').perform(context) == 'true'
     use_rviz = LaunchConfiguration('use_rviz').perform(context) == 'true'
     use_planner = LaunchConfiguration('use_planner').perform(context) == 'true'
@@ -79,15 +78,6 @@ def launch_setup(context, *args, **kwargs):
     load_configs = LaunchConfiguration('load_configs').perform(context) == 'true'
     primary_camera_serial = LaunchConfiguration('primary_camera_serial').perform(context)
     top_camera_serial = LaunchConfiguration('top_camera_serial').perform(context)
-
-    if sensor_mode not in ('lidar', 'top_camera'):
-        raise RuntimeError(
-            f"Invalid sensor_mode '{sensor_mode}'. Expected 'lidar' or 'top_camera'."
-        )
-
-    # sensor_mode is authoritative for selecting the top sensor stack.
-    effective_use_lidar = (sensor_mode == 'lidar') and use_lidar
-    effective_use_top_camera = (sensor_mode == 'top_camera') and use_top_camera
 
     # Get project root for uv packages
     tidybot2_path = os.environ.get('TIDYBOT2_PATH', '/home/locobot/tidybot2')
@@ -113,9 +103,8 @@ def launch_setup(context, *args, **kwargs):
 
     nodes = []
 
-    # URDF from xacro (selected by sensor_mode)
-    urdf_file = 'tidybot_wx250s_lidar.urdf.xacro' if sensor_mode == 'lidar' else 'tidybot_wx250s.urdf.xacro'
-    urdf_path = PathJoinSubstitution([pkg_description, 'urdf', urdf_file])
+    # URDF from xacro
+    urdf_path = PathJoinSubstitution([pkg_description, 'urdf', 'tidybot_wx250s.urdf.xacro'])
     robot_description = ParameterValue(
         Command(['xacro ', urdf_path, ' include_camera_optical_frames:=false']),
         value_type=str
@@ -200,6 +189,8 @@ def launch_setup(context, *args, **kwargs):
                 'load_configs': load_configs,
             }],
             output='screen',
+            respawn=True,
+            respawn_delay=2.0,
         ))
 
         # Left arm on U2D2 #2 (/dev/ttyUSB1)
@@ -218,6 +209,8 @@ def launch_setup(context, *args, **kwargs):
                     'load_configs': load_configs,
                 }],
                 output='screen',
+                respawn=True,
+                respawn_delay=2.0,
             ))
 
         # Sim-compatible topic wrappers (when use_sim_topics:=true)
@@ -255,6 +248,7 @@ def launch_setup(context, *args, **kwargs):
                 'base_frame_id': 'link',
                 'enable_color': True,
                 'enable_depth': True,
+                'align_depth.enable': True,
                 'enable_infra1': False,
                 'enable_infra2': False,
                 'publish_tf': True,
@@ -266,14 +260,15 @@ def launch_setup(context, *args, **kwargs):
             remappings=[
                 ('/camera/realsense/color/image_raw', '/camera/color/image_raw'),
                 ('/camera/realsense/depth/image_rect_raw', '/camera/depth/image_raw'),
+                ('/camera/realsense/aligned_depth_to_color/image_raw', '/camera/aligned_depth_to_color/image_raw'),
                 ('/camera/realsense/color/camera_info', '/camera/color/camera_info'),
                 ('/camera/realsense/depth/camera_info', '/camera/depth/camera_info'),
                 ('/camera/realsense/aligned_depth_to_color/image_raw', '/camera/aligned_depth_to_color/image_raw'),
             ]
         ))
 
-    # Additional top RealSense camera (replaces lidar stack when sensor_mode:=top_camera)
-    if effective_use_top_camera:
+    # Additional top RealSense camera
+    if use_top_camera:
         nodes.append(Node(
             package='realsense2_camera',
             executable='realsense2_camera_node',
@@ -286,6 +281,7 @@ def launch_setup(context, *args, **kwargs):
                 'base_frame_id': 'link',
                 'enable_color': True,
                 'enable_depth': True,
+                'align_depth.enable': True,
                 'enable_infra1': False,
                 'enable_infra2': False,
                 'publish_tf': True,
@@ -296,6 +292,7 @@ def launch_setup(context, *args, **kwargs):
                 # Main image streams
                 ('/camera/top_realsense/color/image_raw', '/top_camera/color/image_raw'),
                 ('/camera/top_realsense/depth/image_rect_raw', '/top_camera/depth/image_raw'),
+                ('/camera/top_realsense/aligned_depth_to_color/image_raw', '/top_camera/aligned_depth_to_color/image_raw'),
                 ('/camera/top_realsense/color/camera_info', '/top_camera/color/camera_info'),
                 ('/camera/top_realsense/depth/camera_info', '/top_camera/depth/camera_info'),
                 # Metadata / IMU / extrinsics
@@ -315,7 +312,7 @@ def launch_setup(context, *args, **kwargs):
         ))
 
     # RPLIDAR A2M8 (LoCoBot-style config; publishes LaserScan on /scan)
-    if effective_use_lidar:
+    if use_lidar:
         lidar_serial_port = LaunchConfiguration('lidar_serial_port').perform(context)
         lidar_serial_baudrate = int(LaunchConfiguration('lidar_serial_baudrate').perform(context))
         lidar_frame_id = LaunchConfiguration('lidar_frame_id').perform(context)
@@ -445,24 +442,20 @@ def generate_launch_description():
             description='Launch pan-tilt RealSense camera driver'
         ),
         DeclareLaunchArgument(
-            'sensor_mode', default_value='lidar',
-            description="Top sensor mode: 'lidar' or 'top_camera' (sensor_mode wins over use_lidar)"
-        ),
-        DeclareLaunchArgument(
             'primary_camera_serial', default_value='_023422071689',
             description='Serial number for primary pan-tilt RealSense camera'
         ),
         DeclareLaunchArgument(
             'top_camera_serial', default_value='_332522075252',
-            description='Serial number for top RealSense camera (used when sensor_mode:=top_camera)'
+            description='Serial number for top RealSense camera'
         ),
         DeclareLaunchArgument(
-            'use_top_camera', default_value='true',
-            description='Top camera enable flag for top_camera mode only; ignored when sensor_mode:=lidar'
+            'use_top_camera', default_value='false',
+            description='Launch the top RealSense camera driver'
         ),
         DeclareLaunchArgument(
             'use_lidar', default_value='false',
-            description='Legacy lidar enable flag for lidar mode only; ignored when sensor_mode:=top_camera'
+            description='Launch the RPLIDAR driver'
         ),
         DeclareLaunchArgument(
             'lidar_serial_port', default_value='/dev/rplidar',
