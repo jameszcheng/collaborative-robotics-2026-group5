@@ -195,7 +195,6 @@ class TestBlockReal(Node):
         request.use_orientation = True
         request.execute = True
         request.duration = duration
-        request.max_condition_number = 200.0
 
         pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
         self.get_logger().info(f'Planning+executing {self.arm_name} to {pos_str}')
