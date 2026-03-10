@@ -408,7 +408,7 @@ def launch_setup(context, *args, **kwargs):
         output='screen',
         parameters=[{
             'robot': 'real',
-            'standoff_dist': 0.5,
+            'standoff_dist': 0.40,
             'goal_tolerance': 0.08,
             'yaw_tolerance': 8.0,
             'kp': 1.0,

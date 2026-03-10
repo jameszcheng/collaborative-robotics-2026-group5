@@ -17,6 +17,27 @@ Topics:
   Pub: /cmd_vel               (geometry_msgs/Twist)
   Pub: /navigation/status     (std_msgs/String)
   Pub: /navigation/goal_pose  (geometry_msgs/PoseStamped)
+
+Testing:
+  # Terminal 1 - Launch robot hardware (includes this node automatically)
+  ros2 launch tidybot_bringup real.launch.py
+
+  # Terminal 2 - Start object detector
+  ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
+
+  # Terminal 3 - Option A: Use NLP interface (voice/text, publishes to /nlp/response)
+  ros2 run tidybot_control nlp_interface_node
+  # Then say or type: "go to the banana" / "pick up the banana"
+  # The NLP node publishes a JSON command to /nlp/response, which triggers navigation.
+  # It also publishes the object name to /perception/target_label for the detector.
+
+  # Terminal 3 - Option B: Trigger navigation manually (no NLP)
+  ros2 topic pub --once /nlp/response std_msgs/msg/String \
+      '{data: "{\"type\": \"command\", \"action\": \"navigate\"}"}'
+
+  # Monitor status
+  ros2 topic echo /navigation/status
+  ros2 topic echo /navigation/goal_pose
 """
 
 import json
@@ -70,7 +91,7 @@ class NavigateToObject(Node):
 
         # --- Parameters ---
         self.declare_parameter('robot',         'real')
-        self.declare_parameter('standoff_dist', 0.5)
+        self.declare_parameter('standoff_dist', 0.40)
         self.declare_parameter('goal_tolerance', 0.08)
         self.declare_parameter('yaw_tolerance',  8.0)   # degrees
         self.declare_parameter('kp',             1.0)
@@ -250,6 +271,8 @@ class NavigateToObject(Node):
                 # Snapshot pose and compute standoff goal
                 obj_x = self._latest_pose.pose.position.x
                 obj_y = self._latest_pose.pose.position.y
+                self.get_logger().info(
+                    f'Object pose: ({obj_x:.3f}, {obj_y:.3f}) in {self._latest_pose.header.frame_id}')
                 self.goal_x, self.goal_y, self.goal_yaw = \
                     self._compute_standoff_goal(obj_x, obj_y)
 
