@@ -99,7 +99,7 @@ import os
 import time
 from datetime import datetime
 
-VERSION = "1.0.9"
+VERSION = "1.1.0"
 
 
 
@@ -505,10 +505,12 @@ class TrajectoryTracker(Node):
             start_y = self.current_y
             sign = 1.0 if test == 'forward' else -1.0
             slowdown_zone = 0.15   # m — start slowing in last 15 cm
+            loop_timeout = time.time() + 30.0  # safety: stop if odom dies
 
-            while True:
+            while time.time() < loop_timeout:
                 travelled = np.hypot(self.current_x - start_x, self.current_y - start_y)
                 if travelled >= self.test_distance:
+                    self.cmd_vel_pub.publish(Twist())  # kill motors immediately
                     break
                 remaining = self.test_distance - travelled
                 if remaining < slowdown_zone:
@@ -519,28 +521,36 @@ class TrajectoryTracker(Node):
                 cmd.linear.x = sign * speed
                 self.cmd_vel_pub.publish(cmd)
                 rclpy.spin_once(self, timeout_sec=0.05)
+            else:
+                self.get_logger().error('TEST timed out (forward/backward) — stopping.')
+                self.cmd_vel_pub.publish(Twist())
 
         elif test in ('left', 'right'):
             sign = 1.0 if test == 'left' else -1.0
             rotated = 0.0
             prev_theta = self.current_theta
             slowdown_zone = 0.35   # rad (~20°) — start slowing before target
+            loop_timeout = time.time() + 30.0  # safety: stop if odom dies
 
-            while True:
+            while time.time() < loop_timeout:
                 d_theta = wrap_angle(self.current_theta - prev_theta)
                 rotated += abs(d_theta)
                 prev_theta = self.current_theta
                 if rotated >= self.test_angle:
+                    self.cmd_vel_pub.publish(Twist())  # kill motors immediately
                     break
                 remaining = self.test_angle - rotated
                 if remaining < slowdown_zone:
-                    speed = max(0.2, self.max_omega * (remaining / slowdown_zone))
+                    speed = max(0.1, self.max_omega * (remaining / slowdown_zone))
                 else:
                     speed = self.max_omega
                 cmd = Twist()
                 cmd.angular.z = sign * speed
                 self.cmd_vel_pub.publish(cmd)
                 rclpy.spin_once(self, timeout_sec=0.05)
+            else:
+                self.get_logger().error('TEST timed out (rotation) — stopping.')
+                self.cmd_vel_pub.publish(Twist())
 
         else:
             self.get_logger().error(f'Unknown test "{test}". Use: forward, backward, left, right')
