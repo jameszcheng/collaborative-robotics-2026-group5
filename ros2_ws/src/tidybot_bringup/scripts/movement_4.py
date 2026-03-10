@@ -42,7 +42,7 @@ TERMINAL 2 — MOVEMENT COMMANDS
 
   2) Go to position (metres relative to origin)
      python3 movement_4.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0
-     python3 movement_4.py --ros-args -p mode:=goto -p goal_x:=1.0 -p goal_y:=0.0 -p robot:=real
+     python3 movement_4.py --ros-args -p mode:=goto -p goal_x:=0.5 -p goal_y:=0.5 -p robot:=real
 
   3) Multiple waypoints — flat list [x1,y1, x2,y2, ...]
      python3 movement_4.py --ros-args -p mode:=goto -p waypoints:="[1.0,0.0, 1.0,1.0, 0.0,0.0]"
