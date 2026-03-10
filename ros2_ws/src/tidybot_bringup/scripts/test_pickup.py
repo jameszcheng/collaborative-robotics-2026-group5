@@ -23,7 +23,7 @@ import traceback
 import numpy as np
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
-from interbotix_xs_msgs.msg import JointGroupCommand, JointSingleCommand
+from interbotix_xs_msgs.msg import JointGroupCommand
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float32, Float64MultiArray, String
@@ -35,7 +35,7 @@ class PickupState(Enum):
     DESCEND = auto()
     GRASP = auto()
     LIFT = auto()
-    SLEEP = auto()
+    DROP = auto()
     DONE = auto()
 
 
@@ -46,10 +46,10 @@ class TestBlockReal(Node):
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.10
-    GRASP_HEIGHT = 0.01
+    APPROACH_HEIGHT = 0.17
+    GRASP_HEIGHT = 0.06
     LIFT_HEIGHT = 0.25
-    Y_OFFSET = 0.0  # forward offset, negative = further from robot (meters)
+    Y_OFFSET = -0.07  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
     ARM_NAME = 'right'
@@ -82,12 +82,13 @@ class TestBlockReal(Node):
             Float64MultiArray, '/camera/pan_tilt_cmd', 10
         )
 
-        # Direct interbotix command topics (same pattern as test_real_hardware.py)
+        # Direct interbotix command topics
         self.arm_group_pub = self.create_publisher(
             JointGroupCommand, f'/{self.arm_name}_arm/commands/joint_group', 10
         )
+        # Gripper via wrapper node (same as test_arms_real.py)
         self.gripper_pub = self.create_publisher(
-            JointSingleCommand, f'/{self.arm_name}_arm/commands/joint_single', 10
+            Float64MultiArray, f'/{self.arm_name}_gripper/cmd', 10
         )
 
         self.get_logger().info('=' * 60)
@@ -123,12 +124,17 @@ class TestBlockReal(Node):
         """Callback for /perception/object_label."""
         self.object_label = msg.data
 
+    def _drain_callbacks(self, count: int = 30):
+        """Process multiple pending callbacks to avoid missing perception messages."""
+        for _ in range(count):
+            rclpy.spin_once(self, timeout_sec=0.005)
+
     def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
         """Wait for a valid object detection with sufficient confidence."""
         self.get_logger().info(f'Waiting for object detection (min confidence: {min_confidence:.2f})...')
         start = time.time()
         while (time.time() - start) < timeout:
-            rclpy.spin_once(self, timeout_sec=0.1)
+            self._drain_callbacks()
             if self.object_found and self.object_pose is not None and self.object_confidence >= min_confidence:
                 self.get_logger().info(
                     f'Object detected: "{self.object_label}" with confidence {self.object_confidence:.2f}'
@@ -139,7 +145,7 @@ class TestBlockReal(Node):
                     f'{self.object_pose.pose.position.z:.3f})'
                 )
                 return True
-            time.sleep(0.1)
+            time.sleep(0.05)
         return False
 
     def wait_for_joint_states(self, timeout: float = 10.0) -> bool:
@@ -214,24 +220,37 @@ class TestBlockReal(Node):
         self.get_logger().warn(f'  FAILED: {result.message}')
         return False
 
-    def command_gripper_pwm(self, pwm: float, duration: float = 1.0):
-        """Command right gripper via JointSingleCommand PWM (test_real_hardware.py style)."""
-        msg = JointSingleCommand()
-        msg.name = f'{self.arm_name}_gripper'
-        msg.cmd = float(pwm)
+    def set_gripper(self, position: float, duration: float = 2.0, hold: bool = False):
+        """Set gripper via wrapper node (same as test_arms_real.py).
+
+        Args:
+            position: 0.0 (open) to 1.0 (closed)
+            duration: Time to hold the command (seconds)
+            hold: If True, skip stop command so gripper maintains force
+        """
+        msg = Float64MultiArray()
+        msg.data = [float(position)]
 
         start = time.time()
-        while time.time() - start < duration:
+        while (time.time() - start) < duration:
             self.gripper_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=0.05)
             time.sleep(0.1)
+
+        if not hold:
+            # Send stop command (0.5 maps to PWM=0 in wrapper)
+            stop_msg = Float64MultiArray()
+            stop_msg.data = [0.5]
+            self.gripper_pub.publish(stop_msg)
+            rclpy.spin_once(self, timeout_sec=0.05)
 
     def open_gripper(self):
         self.get_logger().info('Opening gripper...')
-        self.command_gripper_pwm(450.0, duration=3.0)
+        self.set_gripper(0.0, duration=2.0)
 
     def close_gripper(self):
         self.get_logger().info('Closing gripper...')
-        self.command_gripper_pwm(-350.0, duration=3.0)
+        self.set_gripper(1.0, duration=2.0, hold=True)
 
     def go_to_sleep(self, max_joint_speed: float = 0.5):
         """Send arm to sleep pose using smooth cosine interpolation."""
@@ -277,8 +296,8 @@ class TestBlockReal(Node):
             rclpy.spin_once(self, timeout_sec=0.05)
 
     def _check_detection(self, min_confidence: float = 0.4) -> bool:
-        """Spin once and return True if a valid detection is available."""
-        rclpy.spin_once(self, timeout_sec=0.05)
+        """Drain callbacks and return True if a valid detection is available."""
+        self._drain_callbacks()
         return (self.object_found
                 and self.object_pose is not None
                 and self.object_confidence >= min_confidence)
@@ -343,12 +362,15 @@ class TestBlockReal(Node):
         approach_pose = self.create_pose(x, y, z + self.APPROACH_HEIGHT, qw, qx, qy, qz)
         grasp_pose = self.create_pose(x, y, z + self.GRASP_HEIGHT, qw, qx, qy, qz)
         lift_pose = self.create_pose(x, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
+        # Move right 25cm (negative x in base_link) then drop
+        drop_pose = self.create_pose(x - 0.25, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
 
         self.get_logger().info('')
         self.get_logger().info('Pickup waypoints:')
         self.get_logger().info(f'  approach: ({x:.3f}, {y:.3f}, {z + self.APPROACH_HEIGHT:.3f})')
         self.get_logger().info(f'  descend:  ({x:.3f}, {y:.3f}, {z + self.GRASP_HEIGHT:.3f})')
         self.get_logger().info(f'  lift:     ({x:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
+        self.get_logger().info(f'  drop:     ({x - 0.25:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
         self.get_logger().warn('Ensure workspace is clear before continuing.')
         input('Press Enter to start pickup sequence (Ctrl+C to abort)... ')
 
@@ -371,11 +393,12 @@ class TestBlockReal(Node):
             elif self.state == PickupState.LIFT:
                 if not self.plan_and_execute(lift_pose, duration=10.0):
                     return False
-                self.transition_to(PickupState.SLEEP)
+                self.transition_to(PickupState.DROP)
 
-            elif self.state == PickupState.SLEEP:
+            elif self.state == PickupState.DROP:
+                if not self.plan_and_execute(drop_pose, duration=10.0):
+                    return False
                 self.open_gripper()
-                self.go_to_sleep()
                 self.transition_to(PickupState.DONE)
 
             time.sleep(0.3)
