@@ -110,8 +110,10 @@ class NavigateToObject(Node):
         self.pose_timeout  = self.get_parameter('pose_timeout').value
         self.nav_timeout   = self.get_parameter('nav_timeout').value
 
-        # yaw_offset: sim adds -pi/2 to match odom quaternion convention
-        self.yaw_offset = -math.pi / 2 if self.robot == 'sim' else 0.0
+        # yaw_offset: Phoenix6 base driver odom frame is rotated 90° from
+        # the expected convention (same offset needed for both sim and real).
+        # movement_4.py handles this via COMMAND_FRAME_OFFSET_DEG = 90.0.
+        self.yaw_offset = -math.pi / 2
 
         # --- State ---
         self.state = State.IDLE
@@ -268,7 +270,6 @@ class NavigateToObject(Node):
         # ------ WAITING_FOR_POSE ------
         if self.state == State.WAITING_FOR_POSE:
             if self._latest_pose is not None:
-                # Snapshot pose and compute standoff goal
                 obj_x = self._latest_pose.pose.position.x
                 obj_y = self._latest_pose.pose.position.y
                 self.get_logger().info(
