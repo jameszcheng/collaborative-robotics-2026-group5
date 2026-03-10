@@ -291,13 +291,12 @@ class TestBlockReal(Node):
         waiting at each position. Returns True as soon as an object is detected.
         """
         search_positions = [
-            (0.0,  0.0,  'center'),
-            (0.0,  0.3,  'tilt down'),
-            (-0.5, 0.0,  'pan left'),
-            (0.5,  0.0,  'pan right'),
-            (0.0,  0.0,  'center'),
-            (-0.5, 0.0,  'pan left'),
-            (0.5,  0.0,  'pan right'),
+            (0.0,  0.3,  'center tilt down 0.3'),
+            (-0.5, 0.3,  'pan left tilt 0.3'),
+            (0.5,  0.3,  'pan right tilt 0.3'),
+            (0.0,  0.5,  'center tilt down 0.5'),
+            (-0.5, 0.5,  'pan left tilt 0.5'),
+            (0.5,  0.5,  'pan right tilt 0.5'),
         ]
 
         self.get_logger().info('No object found — starting camera search sweep...')
