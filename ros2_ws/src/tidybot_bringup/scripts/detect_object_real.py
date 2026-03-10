@@ -372,7 +372,10 @@ class ObjectDetectorNode(Node):
             self.last_log_time = now
             pose_str = ""
             if pose_xyz is not None:
-                pose_str = f" pose=({pose_xyz[0]:.3f}, {pose_xyz[1]:.3f}, {pose_xyz[2]:.3f}) in {self.world_frame}"
+                pose_str = (
+                    f" pose=({pose_xyz[0]:.3f}, {pose_xyz[1]:.3f}, {pose_xyz[2]:.3f}) in {self.world_frame}"
+                    f" | rotated=({-pose_xyz[0]:.3f}, {-pose_xyz[1]:.3f}, {pose_xyz[2]:.3f})"
+                )
             fallback_str = " [RAW DEPTH - positions may be inaccurate!]" if self._depth_fallback_active else ""
             self.get_logger().info(
                 f"Detected '{label}' conf={conf:.2f} bbox=({x}, {y}, {w}, {h}){pose_str}{fallback_str}"

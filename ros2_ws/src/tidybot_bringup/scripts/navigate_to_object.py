@@ -11,7 +11,7 @@ TERMINAL 1 — Launch the robot
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 2 — Run object detection
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ros2 run tidybot_bringup detect_object_real.py
+  ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 3 — Navigate to detected object
@@ -56,9 +56,11 @@ Topics:
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, Pose2D, PoseStamped
+from geometry_msgs.msg import Twist, Pose2D, PoseStamped, PointStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
+import tf2_ros
+import tf2_geometry_msgs
 import numpy as np
 import csv
 import os
@@ -72,7 +74,7 @@ VERSION = "1.0.0-object"
 # Hardcoded command-frame rotation (applies to BOTH sim and real).
 # Positive = CCW rotation of commanded (x,y).
 # Example: +90° means goal_x=1,goal_y=0 behaves like (0,1) in the original frame.
-COMMAND_FRAME_OFFSET_DEG = 0.0
+COMMAND_FRAME_OFFSET_DEG = -90.0
 
 
 def wrap_angle(a: float) -> float:
@@ -282,10 +284,14 @@ class NavigateToObject(Node):
             self.target_pub = self.create_publisher(Pose2D, '/base/target_pose', 10)
             self.create_subscription(Bool, '/base/goal_reached', self._sim_goal_callback, 10)
 
+        # --- TF2 for base_link -> odom transform ---
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
         # --- Subscribers ---
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
 
-        # Subscribe to object pose from detect_object_real.py
+        # Subscribe to object pose from detect_object_real.py (in base_link frame)
         self.create_subscription(
             PoseStamped, '/perception/object_pose', self._object_pose_callback, 10
         )
@@ -302,16 +308,25 @@ class NavigateToObject(Node):
     # Object pose callback
     # ------------------------------------------------------------------
     def _object_pose_callback(self, msg: PoseStamped):
-        """Accumulate object pose samples from detect_object_real.py."""
+        """Accumulate object pose samples from detect_object_real.py.
+
+        The pose arrives in base_link frame. We transform it to odom frame
+        so that _compute_object_goal can convert to origin-relative coords.
+        """
         if self._object_goal_set:
             return  # already locked goal, ignore further poses
 
-        self._pose_buffer.append((msg.pose.position.x, msg.pose.position.y))
+        # base_link has +x=left, +y=back; odom has +x=right, +y=forward
+        # so we apply a 180° rotation: (x, y) -> (-x, -y)
+        odom_x = -msg.pose.position.x
+        odom_y = -msg.pose.position.y
+        self._pose_buffer.append((odom_x, odom_y))
 
-        if len(self._pose_buffer) == 1:
-            self.get_logger().info(
-                f'First object pose received. Collecting {self.pose_samples} samples...'
-            )
+        self.get_logger().info(
+            f'Object pose sample {len(self._pose_buffer)}/{self.pose_samples}: '
+            f'base_link=({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}) -> '
+            f'odom=({odom_x:.3f}, {odom_y:.3f})'
+        )
 
         if len(self._pose_buffer) >= self.pose_samples:
             self._object_pose_ready = True
@@ -465,6 +480,13 @@ class NavigateToObject(Node):
             self._object_goal_x = obj_x - (dx / dist) * self.standoff_dist
             self._object_goal_y = obj_y - (dy / dist) * self.standoff_dist
 
+        # Apply command-frame rotation (same as goto mode applies to waypoints)
+        if abs(self.command_frame_offset) > 1e-9:
+            self._object_goal_x, self._object_goal_y = rotate_xy(
+                self._object_goal_x, self._object_goal_y, self.command_frame_offset
+            )
+            obj_x, obj_y = rotate_xy(obj_x, obj_y, self.command_frame_offset)
+
         # Yaw to face the object from the standoff position
         self._object_face_yaw = math.atan2(
             obj_y - self._object_goal_y,
@@ -473,10 +495,19 @@ class NavigateToObject(Node):
 
         self._object_goal_set = True
         self.get_logger().info(
-            f'Object detected at ({obj_x:.3f}, {obj_y:.3f}) in origin frame'
+            f'Object in odom: ({obj_x_odom:.3f}, {obj_y_odom:.3f}) | '
+            f'origin frame: ({obj_x:.3f}, {obj_y:.3f})'
+        )
+        # Convert standoff goal back to odom for logging
+        c, s = np.cos(self.origin_theta), np.sin(self.origin_theta)
+        standoff_odom_x = float(c * self._object_goal_x - s * self._object_goal_y) + self.origin_x
+        standoff_odom_y = float(s * self._object_goal_x + c * self._object_goal_y) + self.origin_y
+        self.get_logger().info(
+            f'Going to odom=({standoff_odom_x:.3f}, {standoff_odom_y:.3f}) '
+            f'({self.standoff_dist:.2f}m standoff from object)'
         )
         self.get_logger().info(
-            f'Standoff goal: ({self._object_goal_x:.3f}, {self._object_goal_y:.3f}), '
+            f'Standoff in origin frame: ({self._object_goal_x:.3f}, {self._object_goal_y:.3f}), '
             f'face_yaw={np.degrees(self._object_face_yaw):.1f}°'
         )
 
