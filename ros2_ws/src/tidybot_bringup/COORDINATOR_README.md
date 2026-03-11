@@ -20,17 +20,17 @@ It acts as a "traffic cop" — it doesn't duplicate any logic from the individua
 │  Trigger │                       │  (state machine)  │
 └──────────┘                       └──┬───┬───┬───┬───┘
                                       │   │   │   │
-                 /perception/         │   │   │   │  /coordinator/
-                 target_label         │   │   │   │  pickup_trigger
+                 /perception/         │   │   │   │  /coordinator/pickup_trigger
+                 target_label         │   │   │   │  /coordinator/object_pose
                     ┌─────────────────┘   │   │   └──────────────────┐
                     v                     │   │                      v
            ┌────────────────┐             │   │             ┌────────────────┐
-           │  detect_object │             │   │             │  pickup   │
+           │  detect_object │             │   │             │    pickup.py   │
            │   _real.py     │             │   │             │   (auto_start) │
            └───────┬────────┘             │   │             └───────┬────────┘
                    │ /perception/         │   │                     │
                    │ object_pose          │   │  /coordinator/      │ /coordinator/
-                   │ object_found         │   │  nav_goal           │ pickup_complete
+                   │ object_confidence    │   │  nav_goal           │ pickup_complete
                    └──────────────────────┘   │                     │
                                               v                     │
                                      ┌────────────────┐             │
@@ -53,9 +53,9 @@ Any state ───────────────────────�
 | State | What happens | Timeout |
 |-------|-------------|---------|
 | IDLE | Waits for NLP command or manual trigger | - |
-| SEARCHING | Publishes target label, waits for detection with sufficient confidence | 30s |
-| NAVIGATING | Sends pose to nav node, waits for nav_complete signal | 90s |
-| REDETECTING | Collects 3 fresh pose samples at close range, averages them | 10s |
+| SEARCHING | Publishes target label; collects 3 confident detections, averages x/y, sends averaged nav_goal | 30s |
+| NAVIGATING | Waits for nav_complete signal from navigate_to_object | 90s |
+| REDETECTING | Collects 3 confident close-range samples **at the same camera position**, averages x/y/z, publishes refined pose; if object not immediately visible runs a 6-position camera sweep | 30s |
 | PICKING_UP | Triggers pickup node, waits for pickup_complete signal | 60s |
 | DONE | Logs success, returns to IDLE after 2s | - |
 
@@ -126,7 +126,6 @@ The pickup node's existing DROP state moves the object 25cm to the right and ope
 |-------|------|--------|
 | `/nlp/response` | String (JSON) | NLP node |
 | `/coordinator/start` | String | Manual trigger |
-| `/perception/object_found` | Bool | Detection node |
 | `/perception/object_pose` | PoseStamped | Detection node |
 | `/perception/object_confidence` | Float32 | Detection node |
 | `/coordinator/nav_complete` | Bool | Navigation node |
@@ -137,6 +136,8 @@ The pickup node's existing DROP state moves the object 25cm to the right and ope
 |-------|------|--------|
 | `/perception/target_label` | String | Detection node |
 | `/coordinator/status` | String | Monitoring |
-| `/coordinator/nav_goal` | PoseStamped | Navigation node |
+| `/coordinator/nav_goal` | PoseStamped | Navigation node (averaged pose from SEARCHING) |
+| `/coordinator/object_pose` | PoseStamped | Pickup node (averaged pose from REDETECTING) |
 | `/coordinator/pickup_trigger` | Empty | Pickup node |
-| `/cmd_vel` | Twist | Emergency stop |
+| `/camera/pan_tilt_cmd` | Float64MultiArray | Camera (pan-tilt sweep during REDETECTING) |
+| `/cmd_vel` | Twist | Emergency stop on FAILED |
