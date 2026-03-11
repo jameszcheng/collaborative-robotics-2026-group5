@@ -104,6 +104,7 @@ class CoordinatorNode(Node):
         self.status_pub = self.create_publisher(String, '/coordinator/status', 10)
         self.nav_goal_pub = self.create_publisher(PoseStamped, '/coordinator/nav_goal', 10)
         self.pickup_trigger_pub = self.create_publisher(Empty, '/coordinator/pickup_trigger', 10)
+        self.refined_pose_pub = self.create_publisher(PoseStamped, '/coordinator/object_pose', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.pan_tilt_pub = self.create_publisher(Float64MultiArray, '/camera/pan_tilt_cmd', 10)
 
@@ -314,11 +315,15 @@ class CoordinatorNode(Node):
                 )
                 # Freeze camera at the pose that produced the successful re-detection.
                 self._redetect_sweep_active = False
-                # Update object_pose with averaged values for pickup node
-                if self.object_pose is not None:
-                    self.object_pose.pose.position.x = avg_x
-                    self.object_pose.pose.position.y = avg_y
-                    self.object_pose.pose.position.z = avg_z
+                # Publish refined averaged pose so pickup.py uses it instead of raw perception
+                refined_pose = PoseStamped()
+                refined_pose.header.stamp = self.get_clock().now().to_msg()
+                refined_pose.header.frame_id = 'base_link'
+                refined_pose.pose.position.x = avg_x
+                refined_pose.pose.position.y = avg_y
+                refined_pose.pose.position.z = avg_z
+                refined_pose.pose.orientation.w = 1.0
+                self.refined_pose_pub.publish(refined_pose)
                 self._set_state(State.PICKING_UP)
                 self._pickup_complete = None
                 self.get_logger().info('Triggering pickup sequence...')

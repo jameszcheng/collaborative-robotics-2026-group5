@@ -65,6 +65,7 @@ class PickupNode(Node):
         # Coordinator publishers/subscribers
         self.pickup_complete_pub = self.create_publisher(Bool, '/coordinator/pickup_complete', 10)
         self.create_subscription(Empty, '/coordinator/pickup_trigger', self._pickup_trigger_cb, 10)
+        self.create_subscription(PoseStamped, '/coordinator/object_pose', self._coordinator_pose_cb, 10)
 
         self.plan_client = self.create_client(PlanToTarget, '/plan_to_target')
 
@@ -130,6 +131,16 @@ class PickupNode(Node):
         """Coordinator triggers pickup — skip the input() prompt."""
         self.get_logger().info('Pickup triggered by coordinator')
         self._pickup_triggered = True
+
+    def _coordinator_pose_cb(self, msg: PoseStamped):
+        """Refined averaged pose from coordinator — overrides raw perception in auto_start mode."""
+        if self.auto_start:
+            self.object_pose = msg
+            self.object_found = True
+            self.get_logger().info(
+                f'Using coordinator refined pose: '
+                f'({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}, {msg.pose.position.z:.3f})'
+            )
 
     def _drain_callbacks(self, count: int = 30):
         """Process multiple pending callbacks to avoid missing perception messages."""
