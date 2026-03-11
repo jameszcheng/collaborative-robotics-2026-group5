@@ -11,7 +11,7 @@
 - **Problem:** When an NLP command is received, the node could immediately lock onto a pose from a previous detection run.
 - **Fix:** Added `self._latest_pose = None` when entering `WAITING_FOR_POSE` to discard stale poses.
 
-### 3. test_pickup.py — Multiple changes
+### 3. pickup.py — Multiple changes
 - Made arm name configurable (currently set to `left`, publishers and gripper use `self.arm_name`)
 - Added `SLEEP` state: after lifting, the arm opens the gripper and returns to sleep pose using smooth cosine interpolation
 - Added `go_to_sleep()` method with joint-space trajectory interpolation
@@ -56,7 +56,7 @@
 Files modified (not yet committed):
 - `ros2_ws/src/tidybot_bringup/scripts/detect_object_real.py` — TF timeout fix
 - `ros2_ws/src/tidybot_bringup/scripts/navigate_to_object.py` — stale pose fix
-- `ros2_ws/src/tidybot_bringup/scripts/test_pickup.py` — left arm, sleep state, no orientation
+- `ros2_ws/src/tidybot_bringup/scripts/pickup.py` — left arm, sleep state, no orientation
 - `ros2_ws/src/tidybot_bringup/CMakeLists.txt` — added go_to_sleep.py
 
 Files added:

@@ -19,7 +19,7 @@ The `camera_tilt` motor's `Drive_Mode` is set to `0` (normal direction) in `ros2
 
 ### Impact
 
-All 3D object positions computed by `detect_object_real.py` (and any other node using the camera TF) are incorrect. The pickup pipeline (`test_pickup.py`) receives wrong target positions, causing IK to fail or the arm to reach the wrong location.
+All 3D object positions computed by `detect_object_real.py` (and any other node using the camera TF) are incorrect. The pickup pipeline (`pickup.py`) receives wrong target positions, causing IK to fail or the arm to reach the wrong location.
 
 ## Potential Fixes
 

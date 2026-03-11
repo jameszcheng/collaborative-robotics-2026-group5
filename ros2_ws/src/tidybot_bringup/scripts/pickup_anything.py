@@ -320,14 +320,14 @@ class PickupAnythingNode(Node):
     """
     Pick up an object specified by language using GraspAnything-6D grasp proposals.
 
-    Differences from test_pickup.py:
+    Differences from pickup.py:
     - No hardcoded ORIENT_FINGERS_DOWN — grasp orientation comes from GraspAnythingClient.
     - Subscribes to RGB + aligned depth + camera_info to feed the grasp model.
     - Falls back to fingers-down orientation if GraspAnything is unavailable or returns
       no proposals (so the script still works without the model installed).
     """
 
-    # Fingers-down fallback quaternion (same as test_pickup.py)
+    # Fingers-down fallback quaternion (same as pickup.py)
     ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
 
@@ -609,7 +609,7 @@ class PickupAnythingNode(Node):
         return p.x, p.y, p.z, qw, qx, qy, qz
 
     # ------------------------------------------------------------------
-    # Motion helpers (same as test_pickup.py)
+    # Motion helpers (same as pickup.py)
     # ------------------------------------------------------------------
 
     def create_pose(self, x, y, z, qw, qx, qy, qz) -> Pose:

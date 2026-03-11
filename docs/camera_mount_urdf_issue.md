@@ -66,7 +66,7 @@ were rotated 90° around the robot's Z axis:
 - Object to the right → reported as being in front
 - The x-coordinate sign/magnitude was consistently wrong
 
-`test_pickup.py` and `pickup_anything.py` received these wrong positions, causing the arm
+`pickup.py` and `pickup_anything.py` received these wrong positions, causing the arm
 to reach to the wrong location.
 
 ---
