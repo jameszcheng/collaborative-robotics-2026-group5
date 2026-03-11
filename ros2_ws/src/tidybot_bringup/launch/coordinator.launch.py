@@ -78,6 +78,7 @@ def generate_launch_description():
             parameters=[{
                 'robot': 'real',
                 'mode': 'object',
+                'reset_origin_on_start': True,
                 'standoff_dist': LaunchConfiguration('standoff_dist'),
                 'lateral_offset': 0.15,
                 'goal_tolerance': 0.08,

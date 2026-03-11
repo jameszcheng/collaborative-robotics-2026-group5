@@ -271,10 +271,17 @@ class NavigateToObject(Node):
                 f'pose_timeout={self.pose_timeout} s, face_object={self.face_object}'
             )
 
-        # --- Handle reset_origin immediately ---
+        # --- Handle reset_origin ---
+        self.declare_parameter('reset_origin_on_start', False)
+        reset_on_start = bool(self.get_parameter('reset_origin_on_start').value)
+
         if self.mode == 'reset_origin':
             self._reset_saved_origin()
             return
+
+        if reset_on_start:
+            self._reset_saved_origin()
+            self.get_logger().info('Origin reset on start — will re-lock from current odom.')
 
         # Load saved origin (skip for test mode)
         if self.mode != 'test':
