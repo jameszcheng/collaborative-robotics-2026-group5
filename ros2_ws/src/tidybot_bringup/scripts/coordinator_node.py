@@ -66,7 +66,6 @@ class CoordinatorNode(Node):
         self.state_start_time = 0.0
 
         # Perception data
-        self.object_found = False
         self.object_pose = None
         self.object_confidence = 0.0
         self._object_pose_stamp_sec = 0.0
@@ -80,7 +79,6 @@ class CoordinatorNode(Node):
         # --- Subscribers ---
         self.create_subscription(String, '/nlp/response', self._nlp_cb, 10)
         self.create_subscription(String, '/coordinator/start', self._start_cb, 10)
-        self.create_subscription(Bool, '/perception/object_found', self._obj_found_cb, 10)
         self.create_subscription(PoseStamped, '/perception/object_pose', self._obj_pose_cb, 10)
         self.create_subscription(Float32, '/perception/object_confidence', self._obj_conf_cb, 10)
         self.create_subscription(Bool, '/coordinator/nav_complete', self._nav_complete_cb, 10)
@@ -153,9 +151,6 @@ class CoordinatorNode(Node):
         self.get_logger().info(f'Received manual trigger: "{obj}"')
         self._start_pipeline(obj)
 
-    def _obj_found_cb(self, msg: Bool):
-        self.object_found = msg.data
-
     def _obj_pose_cb(self, msg: PoseStamped):
         pose_stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
         if self.state == State.REDETECTING and pose_stamp_sec < self._redetect_min_pose_stamp_sec:
@@ -206,7 +201,6 @@ class CoordinatorNode(Node):
 
     def _start_pipeline(self, label: str):
         self.target_label = label
-        self.object_found = False
         self.object_pose = None
         self.object_confidence = 0.0
         self._object_pose_stamp_sec = 0.0
@@ -286,7 +280,6 @@ class CoordinatorNode(Node):
                 self.get_logger().info('Navigation complete! Reached standoff position.')
                 self._set_state(State.REDETECTING)
                 self._redetect_poses = []
-                self.object_found = False
                 self.object_pose = None
                 self.object_confidence = 0.0
                 self._object_pose_stamp_sec = 0.0
