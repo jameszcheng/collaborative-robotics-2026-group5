@@ -105,9 +105,9 @@ ros2 launch tidybot_bringup coordinator.launch.py \
     min_confidence:=0.5
 ```
 
-## "Place in Bin" Strategy
+## "Place in Bowl" Strategy
 
-The pickup node's existing DROP state moves the object 25cm to the right and opens the gripper. Position the bin to the robot's right side.
+The pickup node's existing DROP state moves the object 25cm to the right and opens the gripper. Position a bowl to the robot's right side.
 
 ## Troubleshooting
 

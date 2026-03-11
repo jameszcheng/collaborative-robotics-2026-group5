@@ -77,7 +77,7 @@ if os.path.exists(_default_schema_path):
     _schema = load_schema(_default_schema_path)
 else:
     # Fallback for standalone usage
-    _schema = {"intent": ["pick_and_place"], "object": ["apple", "unknown"], "target": ["bin", "table", "unknown"]}
+    _schema = {"intent": ["pick_and_place"], "object": ["apple", "unknown"], "target": ["bin", "bowl", "table", "unknown"]}
 
 VALID_INTENTS = set(_schema["intent"])
 VALID_OBJECTS = set(_schema["object"])
