@@ -241,6 +241,7 @@ class NavigateToObject(Node):
         self._sim_goal_sent_time = None
 
         # --- Object pose state ---
+        self._nav_goal_received = False                # True once coordinator sends a nav_goal
         self._pose_buffer = []                         # list of (x, y) from received poses
         self._object_pose_ready = False                # True once we have enough samples
         self._object_goal_set = False                  # True once we've computed standoff goal
@@ -339,6 +340,7 @@ class NavigateToObject(Node):
         self.running = True
         # Coordinator already averaged this pose — inject it directly and mark ready,
         # bypassing the local multi-sample accumulation in _object_pose_callback.
+        self._nav_goal_received = True
         odom_x = -msg.pose.position.x
         odom_y = -msg.pose.position.y
         self._pose_buffer = [(odom_x, odom_y)]
@@ -377,6 +379,8 @@ class NavigateToObject(Node):
     #
     def _object_pose_callback(self, msg: PoseStamped):
         """Step 1: Accumulate object pose samples, converting base_link → odom."""
+        if not self._nav_goal_received:
+            return  # wait for coordinator nav_goal before accumulating
         if self._object_goal_set:
             return  # already locked goal, ignore further poses
 
