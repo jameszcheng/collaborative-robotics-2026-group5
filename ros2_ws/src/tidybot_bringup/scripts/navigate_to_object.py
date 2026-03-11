@@ -310,12 +310,29 @@ class NavigateToObject(Node):
     # ------------------------------------------------------------------
     # Object pose callback
     # ------------------------------------------------------------------
+    #
+    # Object navigation coordinate transform sequence:
+    #
+    #   Step 1 (here, _object_pose_callback):
+    #     - Receive object pose from detect_object_real.py in base_link frame
+    #     - Rotate 180° to convert base_link → odom frame
+    #       (base_link: +x=left, +y=back; odom: +x=right, +y=forward)
+    #     - Accumulate N samples (default 5) and average to reduce noise
+    #
+    #   Step 2 (_compute_object_goal):
+    #     - Transform averaged odom pose → origin frame (subtract saved origin)
+    #     - Compute standoff position (back off standoff_dist from object)
+    #     - Apply lateral offset (shift left to line up right arm)
+    #     - Rotate by COMMAND_FRAME_OFFSET_DEG (-90°) to match movement_4.py
+    #       command frame convention
+    #     - Compute face_yaw from standoff position toward object
+    #
+    #   Step 3 (control_loop → go_to_position):
+    #     - Navigate to the standoff goal using proportional controller
+    #     - Align yaw to face the object
+    #
     def _object_pose_callback(self, msg: PoseStamped):
-        """Accumulate object pose samples from detect_object_real.py.
-
-        The pose arrives in base_link frame. We transform it to odom frame
-        so that _compute_object_goal can convert to origin-relative coords.
-        """
+        """Step 1: Accumulate object pose samples, converting base_link → odom."""
         if self._object_goal_set:
             return  # already locked goal, ignore further poses
 
@@ -448,10 +465,7 @@ class NavigateToObject(Node):
     # Compute standoff goal from object pose
     # ------------------------------------------------------------------
     def _compute_object_goal(self):
-        """
-        Average the accumulated object pose samples (in odom frame from
-        detect_object_real) and compute a standoff position in origin frame.
-        """
+        """Step 2: Average pose samples, transform to origin frame, compute standoff + lateral offset."""
         xs = [p[0] for p in self._pose_buffer]
         ys = [p[1] for p in self._pose_buffer]
         obj_x_odom = float(np.mean(xs))
