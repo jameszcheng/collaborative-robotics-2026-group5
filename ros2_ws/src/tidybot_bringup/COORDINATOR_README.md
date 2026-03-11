@@ -66,11 +66,10 @@ Any state ───────────────────────�
 ros2 launch tidybot_bringup real.launch.py use_planner:=true
 ```
 
-### Terminal 2 — Coordinator pipeline (detection + pickup + coordinator)
+### Terminal 2 — Coordinator pipeline (all 4 nodes)
 ```bash
 ros2 launch tidybot_bringup coordinator.launch.py
 ```
-Note: `navigate_to_object.py` is already launched by `real.launch.py` in Terminal 1.
 
 ### Terminal 3 — Voice input (optional)
 ```bash

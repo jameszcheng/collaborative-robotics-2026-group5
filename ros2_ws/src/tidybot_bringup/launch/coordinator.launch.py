@@ -3,10 +3,9 @@ Coordinator Launch File — launches all pipeline nodes for end-to-end pick-and-
 
 Launches:
   1. detect_object_real.py  — perception (object detection)
-  2. test_pickup.py         — arm pickup (auto_start mode, waits for trigger)
-  3. coordinator_node.py    — orchestrator (state machine)
-
-Note: navigate_to_object.py is launched by real.launch.py (not duplicated here).
+  2. navigate_to_object.py  — navigation to standoff position
+  3. test_pickup.py         — arm pickup (auto_start mode, waits for trigger)
+  4. coordinator_node.py    — orchestrator (state machine)
 
 NLP node is NOT included — run it in a separate terminal for voice input:
     ros2 run tidybot_control nlp_interface_node
@@ -39,6 +38,10 @@ def generate_launch_description():
             description='Default object to detect'
         ),
         DeclareLaunchArgument(
+            'standoff_dist', default_value='0.4',
+            description='Navigation standoff distance from object (meters)'
+        ),
+        DeclareLaunchArgument(
             'detect_timeout', default_value='30.0',
             description='Timeout for initial object detection (seconds)'
         ),
@@ -66,8 +69,26 @@ def generate_launch_description():
             }],
         ),
 
-        # 2. Pickup (auto_start — waits for coordinator trigger)
-        # Note: navigate_to_object.py is already launched by real.launch.py
+        # 2. Navigation
+        Node(
+            package='tidybot_bringup',
+            executable='navigate_to_object.py',
+            name='navigate_to_object',
+            output='screen',
+            parameters=[{
+                'robot': 'real',
+                'mode': 'object',
+                'standoff_dist': LaunchConfiguration('standoff_dist'),
+                'lateral_offset': 0.15,
+                'goal_tolerance': 0.08,
+                'kp': 1.0,
+                'max_v': 0.2,
+                'max_omega': 2.0,
+                'pose_timeout': 30.0,
+            }],
+        ),
+
+        # 3. Pickup (auto_start — waits for coordinator trigger)
         Node(
             package='tidybot_bringup',
             executable='test_pickup.py',

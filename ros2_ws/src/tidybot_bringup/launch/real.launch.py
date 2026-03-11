@@ -400,25 +400,6 @@ def launch_setup(context, *args, **kwargs):
             }]
         ))
 
-    # Navigate-to-object node (bridges NLP commands -> base movement)
-    nodes.append(Node(
-        package='tidybot_bringup',
-        executable='navigate_to_object.py',
-        name='navigate_to_object',
-        output='screen',
-        parameters=[{
-            'robot': 'real',
-            'standoff_dist': 0.40,
-            'goal_tolerance': 0.08,
-            'yaw_tolerance': 8.0,
-            'kp': 1.0,
-            'max_v': 0.2,
-            'max_omega': 2.0,
-            'pose_timeout': 15.0,
-            'nav_timeout': 60.0,
-        }]
-    ))
-
     return nodes
 
 
