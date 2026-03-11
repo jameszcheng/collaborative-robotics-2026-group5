@@ -26,7 +26,7 @@ from geometry_msgs.msg import Pose, PoseStamped
 from interbotix_xs_msgs.msg import JointGroupCommand
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Bool, Float32, Float64MultiArray, String
+from std_msgs.msg import Bool, Empty, Float32, Float64MultiArray, String
 from tidybot_msgs.srv import PlanToTarget
 
 
@@ -58,6 +58,15 @@ class TestBlockReal(Node):
         super().__init__('test_block_real')
         self.arm_name = self.ARM_NAME
         self.state = PickupState.APPROACH
+
+        # Coordinator parameters
+        self.declare_parameter('auto_start', False)
+        self.auto_start = bool(self.get_parameter('auto_start').value)
+        self._pickup_triggered = False
+
+        # Coordinator publishers/subscribers
+        self.pickup_complete_pub = self.create_publisher(Bool, '/coordinator/pickup_complete', 10)
+        self.create_subscription(Empty, '/coordinator/pickup_trigger', self._pickup_trigger_cb, 10)
 
         self.plan_client = self.create_client(PlanToTarget, '/plan_to_target')
 
@@ -123,6 +132,11 @@ class TestBlockReal(Node):
     def _object_label_cb(self, msg: String):
         """Callback for /perception/object_label."""
         self.object_label = msg.data
+
+    def _pickup_trigger_cb(self, msg: Empty):
+        """Coordinator triggers pickup — skip the input() prompt."""
+        self.get_logger().info('Pickup triggered by coordinator')
+        self._pickup_triggered = True
 
     def _drain_callbacks(self, count: int = 30):
         """Process multiple pending callbacks to avoid missing perception messages."""
@@ -371,8 +385,11 @@ class TestBlockReal(Node):
         self.get_logger().info(f'  descend:  ({x:.3f}, {y:.3f}, {z + self.GRASP_HEIGHT:.3f})')
         self.get_logger().info(f'  lift:     ({x:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
         self.get_logger().info(f'  drop:     ({x - 0.25:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
-        self.get_logger().warn('Ensure workspace is clear before continuing.')
-        input('Press Enter to start pickup sequence (Ctrl+C to abort)... ')
+        if self.auto_start or self._pickup_triggered:
+            self.get_logger().info('Auto-starting pickup sequence (coordinator mode)')
+        else:
+            self.get_logger().warn('Ensure workspace is clear before continuing.')
+            input('Press Enter to start pickup sequence (Ctrl+C to abort)... ')
 
         while self.state != PickupState.DONE:
             if self.state == PickupState.APPROACH:
@@ -404,7 +421,28 @@ class TestBlockReal(Node):
             time.sleep(0.3)
 
         self.get_logger().info('Pickup state machine complete.')
+        self.pickup_complete_pub.publish(Bool(data=True))
         return True
+
+
+def _run_pickup_once(node):
+    """Run the pickup pipeline once: wait for detection, then execute state machine."""
+    node.get_logger().info('Waiting for object detection...')
+    if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
+        node.get_logger().warn('No object found in initial window — starting camera search sweep.')
+        if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
+            node.get_logger().error('No object detected after full camera sweep. Aborting.')
+            node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
+            node.pickup_complete_pub.publish(Bool(data=False))
+            return 1
+    node.get_logger().info('Object detection ready!')
+
+    ok = node.run_state_machine()
+    if not ok:
+        node.get_logger().error('Pickup failed.')
+        node.pickup_complete_pub.publish(Bool(data=False))
+        return 1
+    return 0
 
 
 def main(args=None):
@@ -423,22 +461,20 @@ def main(args=None):
             node.get_logger().error('Make sure to launch: ros2 launch tidybot_bringup real.launch.py use_planner:=true')
             return 1
 
-        # Wait for object detection, then sweep camera if nothing found
-        node.get_logger().info('')
-        node.get_logger().info('Waiting for object detection...')
-        if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
-            node.get_logger().warn('No object found in initial window — starting camera search sweep.')
-            if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
-                node.get_logger().error('No object detected after full camera sweep. Aborting.')
-                node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
-                return 1
-        node.get_logger().info('Object detection ready!')
-
-        ok = node.run_state_machine()
-        if not ok:
-            node.get_logger().error('Pickup failed.')
-            return 1
-        return 0
+        if node.auto_start:
+            # Coordinator mode: stay alive and wait for pickup triggers
+            node.get_logger().info('Auto-start mode: waiting for /coordinator/pickup_trigger ...')
+            while rclpy.ok():
+                rclpy.spin_once(node, timeout_sec=0.1)
+                if node._pickup_triggered:
+                    node._pickup_triggered = False
+                    node.state = PickupState.APPROACH  # reset state machine
+                    _run_pickup_once(node)
+            return 0
+        else:
+            # Standalone mode: run once and exit
+            node.get_logger().info('')
+            return _run_pickup_once(node)
     except KeyboardInterrupt:
         node.get_logger().info('Interrupted by user.')
         return 130

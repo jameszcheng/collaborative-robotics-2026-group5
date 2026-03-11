@@ -1,0 +1,96 @@
+"""
+Coordinator Launch File — launches all pipeline nodes for end-to-end pick-and-place.
+
+Launches:
+  1. detect_object_real.py  — perception (object detection)
+  2. test_pickup.py         — arm pickup (auto_start mode, waits for trigger)
+  3. coordinator_node.py    — orchestrator (state machine)
+
+Note: navigate_to_object.py is launched by real.launch.py (not duplicated here).
+
+NLP node is NOT included — run it in a separate terminal for voice input:
+    ros2 run tidybot_control nlp_interface_node
+
+Usage:
+    # Terminal 1: Launch robot hardware
+    ros2 launch tidybot_bringup real.launch.py use_planner:=true
+
+    # Terminal 2: Launch coordinator pipeline
+    ros2 launch tidybot_bringup coordinator.launch.py
+
+    # Terminal 3 (optional): Voice input
+    ros2 run tidybot_control nlp_interface_node
+
+    # Or trigger manually:
+    ros2 topic pub /coordinator/start std_msgs/String "data: banana" --once
+"""
+
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument
+from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
+
+
+def generate_launch_description():
+    return LaunchDescription([
+        # Arguments
+        DeclareLaunchArgument(
+            'target_label', default_value='banana',
+            description='Default object to detect'
+        ),
+        DeclareLaunchArgument(
+            'detect_timeout', default_value='30.0',
+            description='Timeout for initial object detection (seconds)'
+        ),
+        DeclareLaunchArgument(
+            'nav_timeout', default_value='90.0',
+            description='Timeout for navigation (seconds)'
+        ),
+        DeclareLaunchArgument(
+            'pickup_timeout', default_value='60.0',
+            description='Timeout for pickup (seconds)'
+        ),
+        DeclareLaunchArgument(
+            'min_confidence', default_value='0.4',
+            description='Minimum detection confidence'
+        ),
+
+        # 1. Object detection
+        Node(
+            package='tidybot_bringup',
+            executable='detect_object_real.py',
+            name='detect_object_real',
+            output='screen',
+            parameters=[{
+                'target_label': LaunchConfiguration('target_label'),
+            }],
+        ),
+
+        # 2. Pickup (auto_start — waits for coordinator trigger)
+        # Note: navigate_to_object.py is already launched by real.launch.py
+        Node(
+            package='tidybot_bringup',
+            executable='test_pickup.py',
+            name='test_pickup',
+            output='screen',
+            parameters=[{
+                'auto_start': True,
+            }],
+        ),
+
+        # 4. Coordinator (orchestrator)
+        Node(
+            package='tidybot_bringup',
+            executable='coordinator_node.py',
+            name='coordinator',
+            output='screen',
+            parameters=[{
+                'detect_timeout': LaunchConfiguration('detect_timeout'),
+                'nav_timeout': LaunchConfiguration('nav_timeout'),
+                'pickup_timeout': LaunchConfiguration('pickup_timeout'),
+                'min_confidence': LaunchConfiguration('min_confidence'),
+                'redetect_timeout': 10.0,
+                'redetect_samples': 3,
+            }],
+        ),
+    ])

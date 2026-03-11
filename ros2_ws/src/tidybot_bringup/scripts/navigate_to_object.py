@@ -59,7 +59,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Pose2D, PoseStamped, PointStamped
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, Empty
 import tf2_ros
 import tf2_geometry_msgs
 import numpy as np
@@ -282,6 +282,7 @@ class NavigateToObject(Node):
 
         # --- Publishers ---
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.nav_complete_pub = self.create_publisher(Bool, '/coordinator/nav_complete', 10)
 
         if self.robot == 'sim':
             self.target_pub = self.create_publisher(Pose2D, '/base/target_pose', 10)
@@ -299,6 +300,11 @@ class NavigateToObject(Node):
             PoseStamped, '/perception/object_pose', self._object_pose_callback, 10
         )
 
+        # Coordinator nav_goal: when received, reset state and start navigating to new object pose
+        self.create_subscription(
+            PoseStamped, '/coordinator/nav_goal', self._nav_goal_callback, 10
+        )
+
         # --- Control timer (50 Hz) ---
         self.create_timer(0.02, self.control_loop)
 
@@ -306,6 +312,26 @@ class NavigateToObject(Node):
             self.get_logger().info(f'Waypoints: {self.waypoints} | tolerance={self.goal_tol:.3f} m')
         if self.mode == 'object':
             self.get_logger().info('Waiting for object pose on /perception/object_pose ...')
+
+    # ------------------------------------------------------------------
+    # Coordinator nav_goal callback
+    # ------------------------------------------------------------------
+    def _nav_goal_callback(self, msg: PoseStamped):
+        """Coordinator sends a new navigation goal — reset state and start navigating."""
+        self.get_logger().info(
+            f'Received nav_goal from coordinator: ({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f})'
+        )
+        # Reset object navigation state
+        self._pose_buffer = []
+        self._object_pose_ready = False
+        self._object_goal_set = False
+        self._object_aligning = False
+        self._waiting_start_time = None
+        self._final_yaw_done = False
+        self.start_time = None
+        # Re-enable navigation
+        self.mode = 'object'
+        self.running = True
 
     # ------------------------------------------------------------------
     # Object pose callback
@@ -792,6 +818,7 @@ class NavigateToObject(Node):
                         self.get_logger().info('Standoff reached. Aligning to face object...')
                     else:
                         self.get_logger().info('Navigation to object complete!')
+                        self.nav_complete_pub.publish(Bool(data=True))
                         self.running = False
                         self.save_results()
                 return
@@ -799,6 +826,7 @@ class NavigateToObject(Node):
             # Phase 3: Align yaw to face the object
             if self._align_to_object():
                 self.get_logger().info('Navigation to object complete!')
+                self.nav_complete_pub.publish(Bool(data=True))
                 self.running = False
                 self.save_results()
             return
