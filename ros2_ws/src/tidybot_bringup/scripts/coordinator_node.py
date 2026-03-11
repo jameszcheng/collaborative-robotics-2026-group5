@@ -26,7 +26,7 @@ from enum import Enum, auto
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Twist
-from std_msgs.msg import Bool, Empty, Float32, String
+from std_msgs.msg import Bool, Empty, Float32, Float64MultiArray, String
 
 
 class State(Enum):
@@ -82,12 +82,26 @@ class CoordinatorNode(Node):
         self.create_subscription(Bool, '/coordinator/nav_complete', self._nav_complete_cb, 10)
         self.create_subscription(Bool, '/coordinator/pickup_complete', self._pickup_complete_cb, 10)
 
+        # Camera sweep state for REDETECTING
+        self._redetect_sweep_positions = [
+            (0.0,  0.5,  'center tilt down 0.5'),
+            (0.0,  0.3,  'center tilt down 0.3'),
+            (-0.3, 0.5,  'pan left tilt 0.5'),
+            (0.3,  0.5,  'pan right tilt 0.5'),
+            (-0.3, 0.3,  'pan left tilt 0.3'),
+            (0.3,  0.3,  'pan right tilt 0.3'),
+        ]
+        self._redetect_sweep_index = 0
+        self._redetect_sweep_start = 0.0
+        self._redetect_sweep_settle_time = 1.5  # seconds to wait at each position
+
         # --- Publishers ---
         self.target_label_pub = self.create_publisher(String, '/perception/target_label', 10)
         self.status_pub = self.create_publisher(String, '/coordinator/status', 10)
         self.nav_goal_pub = self.create_publisher(PoseStamped, '/coordinator/nav_goal', 10)
         self.pickup_trigger_pub = self.create_publisher(Empty, '/coordinator/pickup_trigger', 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.pan_tilt_pub = self.create_publisher(Float64MultiArray, '/camera/pan_tilt_cmd', 10)
 
         # 10 Hz timer
         self.create_timer(0.1, self._tick)
@@ -179,6 +193,12 @@ class CoordinatorNode(Node):
         self.target_label_pub.publish(target_msg)
         self.get_logger().info(f"Searching for '{label}'... (timeout: {self.detect_timeout}s)")
 
+    def _send_pan_tilt(self, pan: float, tilt: float):
+        """Publish a pan-tilt camera command."""
+        msg = Float64MultiArray()
+        msg.data = [pan, tilt]
+        self.pan_tilt_pub.publish(msg)
+
     def _fail(self, reason: str):
         self.get_logger().error(reason)
         self.get_logger().info('State: * -> FAILED -> returning to IDLE')
@@ -223,11 +243,18 @@ class CoordinatorNode(Node):
                 self.get_logger().info('Navigation complete! Reached standoff position.')
                 self._set_state(State.REDETECTING)
                 self._redetect_poses = []
-                # Clear stale pose so we collect fresh samples
+                self.object_found = False
                 self.object_pose = None
+                # Start camera sweep — tilt down first since object is close
+                self._redetect_sweep_index = 0
+                self._redetect_sweep_start = time.time()
+                pan, tilt, desc = self._redetect_sweep_positions[0]
+                self._send_pan_tilt(pan, tilt)
                 self.get_logger().info(
-                    f'Re-detecting object at close range... collecting {self.redetect_samples} samples'
+                    f'Re-detecting object at close range... sweeping camera '
+                    f'({self.redetect_samples} samples needed)'
                 )
+                self.get_logger().info(f'  Camera: {desc} (pan={pan:.2f}, tilt={tilt:.2f})')
             elif elapsed > self.nav_timeout:
                 self._fail(
                     f"Navigation timed out after {self.nav_timeout:.0f}s. "
@@ -236,8 +263,14 @@ class CoordinatorNode(Node):
 
         elif self.state == State.REDETECTING:
             n = len(self._redetect_poses)
+
+            # Keep publishing pan-tilt to hold position
+            if self._redetect_sweep_index < len(self._redetect_sweep_positions):
+                pan, tilt, _ = self._redetect_sweep_positions[self._redetect_sweep_index]
+                self._send_pan_tilt(pan, tilt)
+
             if n >= self.redetect_samples:
-                # Average the re-detection samples
+                # Got enough samples — average and proceed
                 xs = [p.pose.position.x for p in self._redetect_poses[-self.redetect_samples:]]
                 ys = [p.pose.position.y for p in self._redetect_poses[-self.redetect_samples:]]
                 zs = [p.pose.position.z for p in self._redetect_poses[-self.redetect_samples:]]
@@ -252,6 +285,8 @@ class CoordinatorNode(Node):
                 self.get_logger().info(
                     f'Re-detection complete. Averaged pose: ({avg_x:.3f}, {avg_y:.3f}, {avg_z:.3f})'
                 )
+                # Reset camera to center
+                self._send_pan_tilt(0.0, 0.0)
                 # Update object_pose with averaged values for pickup node
                 if self.object_pose is not None:
                     self.object_pose.pose.position.x = avg_x
@@ -261,11 +296,23 @@ class CoordinatorNode(Node):
                 self._pickup_complete = None
                 self.get_logger().info('Triggering pickup sequence...')
                 self.pickup_trigger_pub.publish(Empty())
-            elif elapsed > self.redetect_timeout:
-                self._fail(
-                    f"Re-detection timed out after {self.redetect_timeout:.0f}s. "
-                    f"Object may have moved. Is detect_object_real.py running?"
-                )
+            else:
+                # Advance camera sweep if current position has settled without detection
+                sweep_elapsed = time.time() - self._redetect_sweep_start
+                if (sweep_elapsed > self._redetect_sweep_settle_time
+                        and self._redetect_sweep_index < len(self._redetect_sweep_positions) - 1):
+                    self._redetect_sweep_index += 1
+                    self._redetect_sweep_start = time.time()
+                    pan, tilt, desc = self._redetect_sweep_positions[self._redetect_sweep_index]
+                    self._send_pan_tilt(pan, tilt)
+                    self.get_logger().info(f'  Camera: {desc} (pan={pan:.2f}, tilt={tilt:.2f})')
+
+                if elapsed > self.redetect_timeout:
+                    self._send_pan_tilt(0.0, 0.0)
+                    self._fail(
+                        f"Re-detection timed out after {self.redetect_timeout:.0f}s. "
+                        f"Object may have moved. Is detect_object_real.py running?"
+                    )
 
         elif self.state == State.PICKING_UP:
             if self._pickup_complete is True:
