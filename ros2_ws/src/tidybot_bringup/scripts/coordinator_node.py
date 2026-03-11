@@ -164,9 +164,11 @@ class CoordinatorNode(Node):
         self.object_pose = msg
         self._object_pose_stamp_sec = pose_stamp_sec
         if self.state == State.SEARCHING:
-            self._search_poses.append(msg)
+            if self.object_confidence >= self.min_confidence:
+                self._search_poses.append(msg)
         elif self.state == State.REDETECTING:
-            self._redetect_poses.append(msg)
+            if self.object_confidence >= self.min_confidence:
+                self._redetect_poses.append(msg)
 
     def _obj_conf_cb(self, msg: Float32):
         self.object_confidence = msg.data
@@ -247,39 +249,32 @@ class CoordinatorNode(Node):
             return
 
         elif self.state == State.SEARCHING:
-            n = len(self._search_poses)
-            if n >= self.search_samples:
-                valid = [p for p in self._search_poses[-self.search_samples:]
-                         if self.object_confidence >= self.min_confidence]
-                if len(valid) >= self.search_samples:
-                    xs = [p.pose.position.x for p in valid]
-                    ys = [p.pose.position.y for p in valid]
-                    avg_x = sum(xs) / len(xs)
-                    avg_y = sum(ys) / len(ys)
-                    for i, p in enumerate(valid):
-                        self.get_logger().info(
-                            f'Search sample {i+1}/{self.search_samples}: '
-                            f'({p.pose.position.x:.3f}, {p.pose.position.y:.3f})'
-                        )
+            if len(self._search_poses) >= self.search_samples:
+                samples = self._search_poses[-self.search_samples:]
+                xs = [p.pose.position.x for p in samples]
+                ys = [p.pose.position.y for p in samples]
+                avg_x = sum(xs) / len(xs)
+                avg_y = sum(ys) / len(ys)
+                for i, p in enumerate(samples):
                     self.get_logger().info(
-                        f"Object '{self.target_label}' detected! "
-                        f"confidence={self.object_confidence:.2f}, "
-                        f"averaged pose=({avg_x:.3f}, {avg_y:.3f}) in base_link frame"
+                        f'Search sample {i+1}/{self.search_samples}: '
+                        f'({p.pose.position.x:.3f}, {p.pose.position.y:.3f})'
                     )
-                    nav_goal = PoseStamped()
-                    nav_goal.header.stamp = self.get_clock().now().to_msg()
-                    nav_goal.header.frame_id = 'base_link'
-                    nav_goal.pose.position.x = avg_x
-                    nav_goal.pose.position.y = avg_y
-                    nav_goal.pose.position.z = valid[-1].pose.position.z
-                    nav_goal.pose.orientation.w = 1.0
-                    self._set_state(State.NAVIGATING)
-                    self._nav_complete = False
-                    self.nav_goal_pub.publish(nav_goal)
-                    self.get_logger().info('Sent averaged nav_goal to navigate_to_object node')
-                else:
-                    # Some samples lacked confidence — discard and keep collecting
-                    self._search_poses = []
+                self.get_logger().info(
+                    f"Object '{self.target_label}' detected! "
+                    f"averaged pose=({avg_x:.3f}, {avg_y:.3f}) in base_link frame"
+                )
+                nav_goal = PoseStamped()
+                nav_goal.header.stamp = self.get_clock().now().to_msg()
+                nav_goal.header.frame_id = 'base_link'
+                nav_goal.pose.position.x = avg_x
+                nav_goal.pose.position.y = avg_y
+                nav_goal.pose.position.z = samples[-1].pose.position.z
+                nav_goal.pose.orientation.w = 1.0
+                self._set_state(State.NAVIGATING)
+                self._nav_complete = False
+                self.nav_goal_pub.publish(nav_goal)
+                self.get_logger().info('Sent averaged nav_goal to navigate_to_object node')
             elif elapsed > self.detect_timeout:
                 self._fail(
                     f"No '{self.target_label}' detected after {self.detect_timeout:.0f}s. "
