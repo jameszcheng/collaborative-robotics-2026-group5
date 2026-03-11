@@ -50,6 +50,7 @@ class CoordinatorNode(Node):
         self.declare_parameter('pickup_timeout', 60.0)
         self.declare_parameter('min_confidence', 0.4)
         self.declare_parameter('redetect_samples', 3)
+        self.declare_parameter('search_samples', 3)
 
         self.detect_timeout = float(self.get_parameter('detect_timeout').value)
         self.redetect_timeout = float(self.get_parameter('redetect_timeout').value)
@@ -57,6 +58,7 @@ class CoordinatorNode(Node):
         self.pickup_timeout = float(self.get_parameter('pickup_timeout').value)
         self.min_confidence = float(self.get_parameter('min_confidence').value)
         self.redetect_samples = int(self.get_parameter('redetect_samples').value)
+        self.search_samples = int(self.get_parameter('search_samples').value)
 
         # State
         self.state = State.IDLE
@@ -69,6 +71,7 @@ class CoordinatorNode(Node):
         self.object_confidence = 0.0
         self._object_pose_stamp_sec = 0.0
         self._redetect_poses = []
+        self._search_poses = []
 
         # Completion signals
         self._nav_complete = False
@@ -160,7 +163,9 @@ class CoordinatorNode(Node):
 
         self.object_pose = msg
         self._object_pose_stamp_sec = pose_stamp_sec
-        if self.state == State.REDETECTING:
+        if self.state == State.SEARCHING:
+            self._search_poses.append(msg)
+        elif self.state == State.REDETECTING:
             self._redetect_poses.append(msg)
 
     def _obj_conf_cb(self, msg: Float32):
@@ -206,6 +211,7 @@ class CoordinatorNode(Node):
         self._nav_complete = False
         self._pickup_complete = None
         self._redetect_poses = []
+        self._search_poses = []
         self._redetect_sweep_active = False
         self._redetect_hold_start = 0.0
         self._redetect_min_pose_stamp_sec = 0.0
@@ -241,19 +247,39 @@ class CoordinatorNode(Node):
             return
 
         elif self.state == State.SEARCHING:
-            if self._has_valid_detection():
-                px = self.object_pose.pose.position.x
-                py = self.object_pose.pose.position.y
-                self.get_logger().info(
-                    f"Object '{self.target_label}' detected! "
-                    f"confidence={self.object_confidence:.2f}, "
-                    f"pose=({px:.3f}, {py:.3f}) in base_link frame"
-                )
-                self._set_state(State.NAVIGATING)
-                self._nav_complete = False
-                # Publish the object pose as nav goal — navigate_to_object will handle it
-                self.nav_goal_pub.publish(self.object_pose)
-                self.get_logger().info('Sent nav_goal to navigate_to_object node')
+            n = len(self._search_poses)
+            if n >= self.search_samples:
+                valid = [p for p in self._search_poses[-self.search_samples:]
+                         if self.object_confidence >= self.min_confidence]
+                if len(valid) >= self.search_samples:
+                    xs = [p.pose.position.x for p in valid]
+                    ys = [p.pose.position.y for p in valid]
+                    avg_x = sum(xs) / len(xs)
+                    avg_y = sum(ys) / len(ys)
+                    for i, p in enumerate(valid):
+                        self.get_logger().info(
+                            f'Search sample {i+1}/{self.search_samples}: '
+                            f'({p.pose.position.x:.3f}, {p.pose.position.y:.3f})'
+                        )
+                    self.get_logger().info(
+                        f"Object '{self.target_label}' detected! "
+                        f"confidence={self.object_confidence:.2f}, "
+                        f"averaged pose=({avg_x:.3f}, {avg_y:.3f}) in base_link frame"
+                    )
+                    nav_goal = PoseStamped()
+                    nav_goal.header.stamp = self.get_clock().now().to_msg()
+                    nav_goal.header.frame_id = 'base_link'
+                    nav_goal.pose.position.x = avg_x
+                    nav_goal.pose.position.y = avg_y
+                    nav_goal.pose.position.z = valid[-1].pose.position.z
+                    nav_goal.pose.orientation.w = 1.0
+                    self._set_state(State.NAVIGATING)
+                    self._nav_complete = False
+                    self.nav_goal_pub.publish(nav_goal)
+                    self.get_logger().info('Sent averaged nav_goal to navigate_to_object node')
+                else:
+                    # Some samples lacked confidence — discard and keep collecting
+                    self._search_poses = []
             elif elapsed > self.detect_timeout:
                 self._fail(
                     f"No '{self.target_label}' detected after {self.detect_timeout:.0f}s. "

@@ -324,13 +324,11 @@ class NavigateToObject(Node):
     # Coordinator nav_goal callback
     # ------------------------------------------------------------------
     def _nav_goal_callback(self, msg: PoseStamped):
-        """Coordinator sends a new navigation goal — reset state and start navigating."""
+        """Coordinator sends a pre-averaged navigation goal — use it directly, skip local averaging."""
         self.get_logger().info(
             f'Received nav_goal from coordinator: ({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f})'
         )
         # Reset object navigation state
-        self._pose_buffer = []
-        self._object_pose_ready = False
         self._object_goal_set = False
         self._object_aligning = False
         self._waiting_start_time = None
@@ -339,6 +337,16 @@ class NavigateToObject(Node):
         # Re-enable navigation
         self.mode = 'object'
         self.running = True
+        # Coordinator already averaged this pose — inject it directly and mark ready,
+        # bypassing the local multi-sample accumulation in _object_pose_callback.
+        odom_x = -msg.pose.position.x
+        odom_y = -msg.pose.position.y
+        self._pose_buffer = [(odom_x, odom_y)]
+        self._object_pose_ready = True
+        self.get_logger().info(
+            f'Nav goal injected directly: base_link=({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}) '
+            f'-> odom=({odom_x:.3f}, {odom_y:.3f})'
+        )
 
     # ------------------------------------------------------------------
     # Object pose callback
@@ -350,7 +358,10 @@ class NavigateToObject(Node):
     #     - Receive object pose from detect_object_real.py in base_link frame
     #     - Rotate 180° to convert base_link → odom frame
     #       (base_link: +x=left, +y=back; odom: +x=right, +y=forward)
-    #     - Accumulate N samples (default 5) and average to reduce noise
+    #     - Accumulate N samples and average to reduce noise
+    #     - NOTE: when running under the coordinator, _nav_goal_callback injects
+    #       the pre-averaged pose directly and sets _object_pose_ready=True,
+    #       so this callback's accumulation is bypassed entirely.
     #
     #   Step 2 (_compute_object_goal):
     #     - Transform averaged odom pose → origin frame (subtract saved origin)
