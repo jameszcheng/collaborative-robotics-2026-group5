@@ -17,6 +17,31 @@ import tempfile
 import threading
 import time
 
+# Load .env file if present (for GEMINI_API_KEY, etc.)
+def _load_dotenv():
+    """Load key=value pairs from .env file into os.environ."""
+    # Search: repo root, cwd, home
+    candidates = [
+        os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', '..', '.env'),
+        os.path.join(os.getcwd(), '.env'),
+        os.path.expanduser('~/.env'),
+    ]
+    for path in candidates:
+        path = os.path.realpath(path)
+        if os.path.isfile(path):
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    key, _, value = line.partition('=')
+                    key, value = key.strip(), value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+            break
+
+_load_dotenv()
+
 import numpy as np
 
 try:
