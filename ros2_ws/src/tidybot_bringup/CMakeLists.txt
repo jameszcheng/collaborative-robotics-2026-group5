@@ -39,7 +39,7 @@ install(PROGRAMS
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
   scripts/trajectory_tracking.py
-  scripts/test_pickup.py
+  scripts/pickup.py
   scripts/pick_up_block_real.py
   scripts/test_block_reachability.py
   scripts/movement_2.py

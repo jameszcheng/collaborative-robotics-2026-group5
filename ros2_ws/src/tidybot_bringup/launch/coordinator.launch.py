@@ -4,7 +4,7 @@ Coordinator Launch File — launches all pipeline nodes for end-to-end pick-and-
 Launches:
   1. detect_object_real.py  — perception (object detection)
   2. navigate_to_object.py  — navigation to standoff position
-  3. test_pickup.py         — arm pickup (auto_start mode, waits for trigger)
+  3. pickup.py         — arm pickup (auto_start mode, waits for trigger)
   4. coordinator_node.py    — orchestrator (state machine)
 
 NLP node is NOT included — run it in a separate terminal for voice input:
@@ -92,8 +92,8 @@ def generate_launch_description():
         # 3. Pickup (auto_start — waits for coordinator trigger)
         Node(
             package='tidybot_bringup',
-            executable='test_pickup.py',
-            name='test_pickup',
+            executable='pickup.py',
+            name='pickup',
             output='screen',
             parameters=[{
                 'auto_start': True,

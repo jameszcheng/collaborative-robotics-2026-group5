@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-Pick up a block on real hardware using a simple state machine.
+pickup.py — Pick up an object on real hardware using a simple state machine.
 
 State machine:
-    approach -> descend -> grasp -> lift -> done
+    approach -> descend -> grasp -> lift -> drop -> done
 
-Usage:
-    # Terminal 1
+Standalone usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
-
-    # Terminal 2 (optional - for object detection)
     ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
+    ros2 run tidybot_bringup pickup.py
 
-    # Terminal 3
-    ros2 run tidybot_bringup test_pickup.py
+Coordinator usage (auto_start mode — waits for trigger):
+    ros2 launch tidybot_bringup coordinator.launch.py
 """
 
 import time
@@ -39,7 +37,7 @@ class PickupState(Enum):
     DONE = auto()
 
 
-class TestBlockReal(Node):
+class PickupNode(Node):
     """Plan and execute a real-world block pickup using perception or fixed defaults."""
 
     ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
@@ -55,7 +53,7 @@ class TestBlockReal(Node):
     ARM_NAME = 'right'
 
     def __init__(self):
-        super().__init__('test_block_real')
+        super().__init__('pickup')
         self.arm_name = self.ARM_NAME
         self.state = PickupState.APPROACH
 
@@ -86,11 +84,6 @@ class TestBlockReal(Node):
         self.create_subscription(Float32, '/perception/object_confidence', self._object_confidence_cb, 10)
         self.create_subscription(String, '/perception/object_label', self._object_label_cb, 10)
 
-        # Pan-tilt camera control
-        self.pan_tilt_pub = self.create_publisher(
-            Float64MultiArray, '/camera/pan_tilt_cmd', 10
-        )
-
         # Direct interbotix command topics
         self.arm_group_pub = self.create_publisher(
             JointGroupCommand, f'/{self.arm_name}_arm/commands/joint_group', 10
@@ -101,7 +94,7 @@ class TestBlockReal(Node):
         )
 
         self.get_logger().info('=' * 60)
-        self.get_logger().info('TidyBot2 Real Block Pickup Test (State Machine)')
+        self.get_logger().info('TidyBot2 Pickup Node (State Machine)')
         self.get_logger().info('=' * 60)
         self.get_logger().info(f'Arm: {self.arm_name}')
 
@@ -301,70 +294,6 @@ class TestBlockReal(Node):
 
         self.get_logger().info(f'{self.arm_name} arm is now in sleep pose.')
 
-    def send_pan_tilt(self, pan: float, tilt: float, duration: float = 1.0):
-        """Send pan-tilt command, publishing repeatedly for the given duration."""
-        msg = Float64MultiArray()
-        msg.data = [pan, tilt]
-        for _ in range(int(duration * 20)):
-            self.pan_tilt_pub.publish(msg)
-            rclpy.spin_once(self, timeout_sec=0.05)
-
-    def _check_detection(self, min_confidence: float = 0.4) -> bool:
-        """Drain callbacks and return True if a valid detection is available."""
-        self._drain_callbacks()
-        return (self.object_found
-                and self.object_pose is not None
-                and self.object_confidence >= min_confidence)
-
-    def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
-        """
-        Sweep the camera through several pan/tilt positions looking for an object.
-
-        Checks for detections continuously — during pan-tilt movement and while
-        waiting at each position. Returns True as soon as an object is detected.
-        """
-        search_positions = [
-            (0.0,  0.3,  'center tilt down 0.3'),
-            (-0.5, 0.3,  'pan left tilt 0.3'),
-            (0.5,  0.3,  'pan right tilt 0.3'),
-            (0.0,  0.5,  'center tilt down 0.5'),
-            (-0.5, 0.5,  'pan left tilt 0.5'),
-            (0.5,  0.5,  'pan right tilt 0.5'),
-        ]
-
-        self.get_logger().info('No object found — starting camera search sweep...')
-
-        for pan, tilt, description in search_positions:
-            self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
-
-            # Move camera while checking for detections
-            msg = Float64MultiArray()
-            msg.data = [pan, tilt]
-            for _ in range(20):  # ~1 second of movement
-                self.pan_tilt_pub.publish(msg)
-                if self._check_detection(min_confidence):
-                    self.get_logger().info(
-                        f'  Object found during move to {description}: "{self.object_label}" '
-                        f'(confidence {self.object_confidence:.2f})')
-                    return True
-                time.sleep(0.05)
-
-            # Wait at this position, checking continuously
-            start = time.time()
-            while (time.time() - start) < timeout_per_position:
-                self.pan_tilt_pub.publish(msg)
-                if self._check_detection(min_confidence):
-                    self.get_logger().info(
-                        f'  Object found at {description}: "{self.object_label}" '
-                        f'(confidence {self.object_confidence:.2f})')
-                    return True
-                time.sleep(0.05)
-
-        # Return camera to center
-        self.send_pan_tilt(0.0, 0.0, duration=1.0)
-        self.get_logger().warn('Camera search sweep complete — no object detected.')
-        return False
-
     def run_state_machine(self) -> bool:
         x = self.object_pose.pose.position.x
         y = self.object_pose.pose.position.y + self.Y_OFFSET
@@ -428,13 +357,11 @@ class TestBlockReal(Node):
 def _run_pickup_once(node):
     """Run the pickup pipeline once: wait for detection, then execute state machine."""
     node.get_logger().info('Waiting for object detection...')
-    if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
-        node.get_logger().warn('No object found in initial window — starting camera search sweep.')
-        if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
-            node.get_logger().error('No object detected after full camera sweep. Aborting.')
-            node.get_logger().error('Run: ros2 run tidybot_bringup detect_object_real.py')
-            node.pickup_complete_pub.publish(Bool(data=False))
-            return 1
+    if not node.wait_for_object_detection(timeout=15.0, min_confidence=0.4):
+        node.get_logger().error('No object detected. Aborting.')
+        node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
+        node.pickup_complete_pub.publish(Bool(data=False))
+        return 1
     node.get_logger().info('Object detection ready!')
 
     ok = node.run_state_machine()
@@ -447,7 +374,7 @@ def _run_pickup_once(node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TestBlockReal()
+    node = PickupNode()
 
     try:
         node.get_logger().info('Waiting for joint states...')

@@ -25,7 +25,7 @@ It acts as a "traffic cop" — it doesn't duplicate any logic from the individua
                     ┌─────────────────┘   │   │   └──────────────────┐
                     v                     │   │                      v
            ┌────────────────┐             │   │             ┌────────────────┐
-           │  detect_object │             │   │             │  test_pickup   │
+           │  detect_object │             │   │             │  pickup   │
            │   _real.py     │             │   │             │   (auto_start) │
            └───────┬────────┘             │   │             └───────┬────────┘
                    │ /perception/         │   │                     │

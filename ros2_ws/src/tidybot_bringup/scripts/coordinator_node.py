@@ -323,7 +323,7 @@ class CoordinatorNode(Node):
             elif elapsed > self.pickup_timeout:
                 self._fail(
                     f"Pickup timed out after {self.pickup_timeout:.0f}s. "
-                    f"Is test_pickup.py running?"
+                    f"Is pickup.py running?"
                 )
 
         elif self.state == State.DONE:
