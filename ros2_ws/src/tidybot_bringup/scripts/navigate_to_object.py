@@ -41,6 +41,7 @@ OPTIONAL PARAMETERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   -p robot:=real                # real robot (default: sim)
   -p standoff_dist:=0.4        # stop this far from object (default: 0.4 m)
+  -p lateral_offset:=0.15      # shift left to line up right arm (default: 0.15 m)
   -p pose_timeout:=30.0        # wait this long for first object pose (default: 30 s)
   -p kp:=1.5                   # proportional gain (default: 1.0)
   -p max_v:=0.2                # max linear speed m/s (default: 0.2)
@@ -143,6 +144,7 @@ class NavigateToObject(Node):
 
         # --- NEW: object navigation parameters ---
         self.declare_parameter('standoff_dist', 0.4)   # metres — stop this far from the object
+        self.declare_parameter('lateral_offset', 0.15)  # metres — positive = shift left (to line up right arm)
         self.declare_parameter('pose_timeout', 30.0)    # seconds to wait for first object pose
         self.declare_parameter('face_object', True)     # align to face the object after reaching standoff
         self.declare_parameter('pose_samples', 5)       # average this many pose readings before locking goal
@@ -192,8 +194,9 @@ class NavigateToObject(Node):
         self.origin_file = os.path.expanduser(f'~/.tidybot_origin_{ns}.txt')
 
         # Object navigation params
-        self.standoff_dist = float(self.get_parameter('standoff_dist').value)
-        self.pose_timeout  = float(self.get_parameter('pose_timeout').value)
+        self.standoff_dist  = float(self.get_parameter('standoff_dist').value)
+        self.lateral_offset = float(self.get_parameter('lateral_offset').value)
+        self.pose_timeout   = float(self.get_parameter('pose_timeout').value)
         self.face_object   = bool(self.get_parameter('face_object').value)
         self.pose_samples  = int(self.get_parameter('pose_samples').value)
 
@@ -477,8 +480,20 @@ class NavigateToObject(Node):
             self._object_goal_x = self.current_x
             self._object_goal_y = self.current_y
         else:
-            self._object_goal_x = obj_x - (dx / dist) * self.standoff_dist
-            self._object_goal_y = obj_y - (dy / dist) * self.standoff_dist
+            # Unit vector from robot toward object
+            ux = dx / dist
+            uy = dy / dist
+            # Standoff: back off along that vector
+            self._object_goal_x = obj_x - ux * self.standoff_dist
+            self._object_goal_y = obj_y - uy * self.standoff_dist
+            # Lateral offset: perpendicular to robot→object direction
+            # Positive = left when facing the object (to line up right arm)
+            if abs(self.lateral_offset) > 1e-6:
+                # Left perpendicular: rotate (ux, uy) by +90°
+                perp_x = -uy
+                perp_y = ux
+                self._object_goal_x += perp_x * self.lateral_offset
+                self._object_goal_y += perp_y * self.lateral_offset
 
         # Apply command-frame rotation (same as goto mode applies to waypoints)
         if abs(self.command_frame_offset) > 1e-9:
