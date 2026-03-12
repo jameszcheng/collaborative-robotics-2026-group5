@@ -360,6 +360,11 @@
     </thead>
     <tbody>
       <tr>
+        <td><code>nlp_interface_node.py</code></td>
+        <td>tidybot_control/</td>
+        <td>Voice/text interface — Gemini parsing, command confirmation, and runtime object targeting</td>
+      </tr>
+      <tr>
         <td><code>task1_coordinator.py</code></td>
         <td>tidybot_bringup/scripts/</td>
         <td>Task 1 state machine — detect → navigate → pick up → return to start</td>
@@ -717,10 +722,11 @@
       <div class="team-name">Yazhou Zhang</div>
       <div class="team-role">Perception · NLP · Manipulation</div>
       <ul class="team-contrib">
-        <li>Depth-to-world coordinate projection with CameraInfo + TF</li>
-        <li>NLP interface initial implementation</li>
-        <li>Real-hardware manipulation tuning (left arm, tolerances)</li>
-        <li>RealSense depth-color alignment &amp; topic fallback</li>
+        <li>Implemented depth-to-world coordinate projection using CameraInfo intrinsics and TF transforms for object localization in the robot base frame</li>
+        <li>Built the initial NLP interface for natural-language command parsing and conversational robot interaction</li>
+        <li>Integrated perception with the NLP node for voice-driven object targeting</li>
+        <li>Added RealSense depth-color alignment handling and topic fallback for more reliable real-hardware perception</li>
+        <li>Contributed real-hardware manipulation tuning, including left-arm calibration and grasp tolerance adjustments</li>
       </ul>
     </div>
 
