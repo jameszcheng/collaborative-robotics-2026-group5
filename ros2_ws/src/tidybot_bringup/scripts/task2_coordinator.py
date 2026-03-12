@@ -45,7 +45,7 @@ class CoordinatorNode(Node):
 
         # Parameters
         self.declare_parameter('detect_timeout', 30.0)
-        self.declare_parameter('redetect_timeout', 30.0)
+        self.declare_parameter('redetect_timeout', 45.0)
         self.declare_parameter('nav_timeout', 90.0)
         self.declare_parameter('pickup_timeout', 60.0)
         self.declare_parameter('min_confidence', 0.4)
@@ -96,7 +96,8 @@ class CoordinatorNode(Node):
         self._redetect_sweep_settle_time = 5.0   # seconds at each position with no detection before advancing
         self._redetect_sweep_active = False
         self._redetect_hold_start = 0.0
-        self._redetect_min_pose_stamp_sec = 0.0
+        self._redetect_pose_seq = 0        # monotonic counter for incoming poses
+        self._redetect_min_pose_seq = 0    # poses before this seq are stale
 
         # --- Publishers ---
         self.target_label_pub = self.create_publisher(String, '/perception/target_label', 10)
@@ -152,7 +153,15 @@ class CoordinatorNode(Node):
 
     def _obj_pose_cb(self, msg: PoseStamped):
         pose_stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
-        if self.state == State.REDETECTING and pose_stamp_sec < self._redetect_min_pose_stamp_sec:
+        self._redetect_pose_seq += 1
+
+        # In REDETECTING, only accept poses received after we entered the state.
+        # Use a monotonic counter instead of timestamp comparison, since the camera
+        # image timestamps may differ from the ROS clock on real hardware.
+        if self.state == State.REDETECTING and self._redetect_pose_seq < self._redetect_min_pose_seq:
+            self.get_logger().debug(
+                f'Skipping stale pose (seq {self._redetect_pose_seq}/{self._redetect_min_pose_seq})'
+            )
             return
 
         self.object_pose = msg
@@ -163,6 +172,16 @@ class CoordinatorNode(Node):
         elif self.state == State.REDETECTING:
             if self.object_confidence >= self.min_confidence:
                 self._redetect_poses.append(msg)
+                self.get_logger().info(
+                    f'Redetect pose accepted: ({msg.pose.position.x:.3f}, '
+                    f'{msg.pose.position.y:.3f}, {msg.pose.position.z:.3f}) '
+                    f'conf={self.object_confidence:.2f}'
+                )
+            else:
+                self.get_logger().info(
+                    f'Redetect pose rejected (low confidence={self.object_confidence:.2f} '
+                    f'< {self.min_confidence:.2f})'
+                )
 
     def _obj_conf_cb(self, msg: Float32):
         self.object_confidence = msg.data
@@ -194,7 +213,7 @@ class CoordinatorNode(Node):
             and self.object_confidence >= self.min_confidence
             and (
                 self.state != State.REDETECTING
-                or self._object_pose_stamp_sec >= self._redetect_min_pose_stamp_sec
+                or self._redetect_pose_seq >= self._redetect_min_pose_seq
             )
         )
 
@@ -209,7 +228,8 @@ class CoordinatorNode(Node):
         self._search_poses = []
         self._redetect_sweep_active = False
         self._redetect_hold_start = 0.0
-        self._redetect_min_pose_stamp_sec = 0.0
+        self._redetect_pose_seq = 0
+        self._redetect_min_pose_seq = 0
 
         self._set_state(State.SEARCHING)
         self.get_logger().info(f"Setting target label to '{label}'")
@@ -299,9 +319,8 @@ class CoordinatorNode(Node):
                 self._redetect_sweep_index = 0
                 self._redetect_sweep_start = time.time()
                 self._redetect_hold_start = time.time()
-                self._redetect_min_pose_stamp_sec = (
-                    float(self.get_clock().now().nanoseconds) * 1e-9
-                )
+                # Mark current pose seq so we skip any stale poses from before navigation
+                self._redetect_min_pose_seq = self._redetect_pose_seq + 1
                 self.get_logger().info(
                     f'Re-detecting object at close range... holding current camera pose for '
                     f'{self._redetect_sweep_settle_time:.0f}s before any sweep '

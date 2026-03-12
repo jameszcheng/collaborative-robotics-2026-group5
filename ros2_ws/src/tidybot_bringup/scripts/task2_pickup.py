@@ -45,7 +45,7 @@ class PickupNode(Node):
 
     # Waypoint offsets from grasp target (meters)
     APPROACH_HEIGHT = 0.17
-    GRASP_HEIGHT = 0.06
+    GRASP_HEIGHT = 0.05
     LIFT_HEIGHT = 0.25
     Y_OFFSET = -0.07  # forward offset, negative = further from robot (meters)
 
