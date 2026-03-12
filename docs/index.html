@@ -310,16 +310,18 @@
       <div class="card-icon">🗣️</div>
       <h3>Task 1 — Object Retrieval</h3>
       <p>
-        User says <em>"retrieve the banana."</em> Robot interprets the command, scans
-        the scene with YOLO, navigates to the object, grasps it, and returns to start.
+        User says <em>"retrieve the banana."</em> Robot detects the object with YOLO,
+        navigates to it, grasps it with the right arm, and <strong>returns to the starting
+        position</strong> while holding the object.
       </p>
     </div>
     <div class="card">
       <div class="card-icon">📦</div>
-      <h3>Task 2 — Sequential Pick-and-Place</h3>
+      <h3>Task 2 — Pick and Place</h3>
       <p>
-        User says <em>"find the apple and place it in the basket."</em> Robot performs
-        a full sequential task: detect, navigate, grasp, navigate to target, release.
+        User says <em>"pick up the banana and place it in the bin."</em> Robot detects,
+        navigates, grasps, then <strong>drops the object 25 cm to its right</strong>—into
+        a bowl or bin positioned beside the robot.
       </p>
     </div>
     <div class="card">
@@ -358,9 +360,14 @@
     </thead>
     <tbody>
       <tr>
-        <td><code>coordinator_node.py</code></td>
+        <td><code>task1_coordinator.py</code></td>
         <td>tidybot_bringup/scripts/</td>
-        <td>Central state machine — orchestrates all other nodes</td>
+        <td>Task 1 state machine — detect → navigate → pick up → return to start</td>
+      </tr>
+      <tr>
+        <td><code>task2_coordinator.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 2 state machine — detect → navigate → pick up → drop in bowl/bin</td>
       </tr>
       <tr>
         <td><code>detect_object_real.py</code></td>
@@ -373,9 +380,14 @@
         <td>Proportional controller → standoff position + yaw alignment</td>
       </tr>
       <tr>
-        <td><code>pickup.py</code></td>
+        <td><code>task1_pickup.py</code></td>
         <td>tidybot_bringup/scripts/</td>
-        <td>Arm state machine using mink IK → approach → grasp → lift</td>
+        <td>Task 1 arm node — approach → descend → grasp → lift (holds object)</td>
+      </tr>
+      <tr>
+        <td><code>task2_pickup.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 2 arm node — approach → descend → grasp → lift → drop 25 cm right</td>
       </tr>
     </tbody>
   </table>
@@ -390,45 +402,57 @@
   Google Gemini (NLP)  ──→  {action: "retrieve", object: "banana"}
       │
       ▼
-  ┌─────────────────────────────────────────────┐
-  │           coordinator_node.py               │
-  │           (Central State Machine)           │
-  └───────┬────────────────────┬────────────────┘
+  ┌─────────────────────────────────────────────────────────┐
+  │          task1_coordinator / task2_coordinator          │
+  │                  (Central State Machine)                │
+  └───────┬────────────────────┬────────────────────────────┘
           │                    │
           ▼                    ▼
   detect_object_real.py    navigate_to_object.py
   YOLOv8 on RGB frame      Proportional controller
   Median depth patch        → standoff + yaw align
-  Back-project → base_link
+  Back-project → base_link  → tilt camera down 0.5 rad
   /perception/object_pose  /coordinator/nav_complete
           │                    │
           └────────┬───────────┘
                    ▼
-           coordinator aggregates
-           3 confident poses → averaged goal
+           SEARCHING: accumulate 3 confident
+           detections → averaged x/y nav goal
                    │
                    ▼
-           REDETECTING (close-range)
-           3 poses, same camera angle
+           PAUSE: settling delay (3 s)
+           stale perception data clears
                    │
                    ▼
-              pickup.py
-              APPROACH → DESCEND → GRASP → LIFT → DROP
-              mink IK + PlanToTarget service
+         task1_pickup.py              task2_pickup.py
+         APPROACH → DESCEND           APPROACH → DESCEND
+         → GRASP → LIFT               → GRASP → LIFT → DROP
+         (holds object)               (releases 25 cm right)
                    │
                    ▼
            /coordinator/pickup_complete
+                   │
+         ┌─────────┴────────────┐
+         ▼                      ▼
+    Task 1: RETURNING      Task 2: DONE
+    robot drives back        → IDLE
+    to origin (0,0)
+         │
+         ▼
+       DONE → IDLE
     </pre>
   </div>
 
   <!-- State Machine -->
-  <h3 style="margin-top:2rem;">Coordinator State Machine</h3>
+  <h3 style="margin-top:2rem;">Coordinator State Machines</h3>
   <p>
-    The coordinator implements a 6-state finite state machine. Each state has a defined
-    timeout and a single entry/exit condition—keeping logic clean and debuggable.
+    Each task has its own coordinator with a dedicated finite state machine. States share a common
+    pattern; the key difference is Task 1 adds a <strong>RETURNING</strong> state to drive back to
+    the start, while Task 2 ends immediately after the drop.
   </p>
 
   <div class="pipeline">
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin-bottom:0.5rem;">Task 1 — Object Retrieval</p>
     <div class="states">
       <div class="state-box">IDLE</div>
       <div class="arrow">→</div>
@@ -436,41 +460,66 @@
       <div class="arrow">→</div>
       <div class="state-box">NAVIGATING</div>
       <div class="arrow">→</div>
-      <div class="state-box">REDETECTING</div>
+      <div class="state-box">PAUSE</div>
       <div class="arrow">→</div>
-      <div class="state-box">PICKING UP</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">RETURNING</div>
       <div class="arrow">→</div>
       <div class="state-box">DONE</div>
       <div class="arrow">→</div>
       <div class="state-box" style="opacity:.6;">IDLE</div>
     </div>
-    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin-bottom:1.5rem;">
-      Any state can transition to FAILED on timeout, which resets to IDLE.
+
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin: 1rem 0 0.5rem;">Task 2 — Pick and Place</p>
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PAUSE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin: 0.75rem 0 1.5rem;">
+      Any state can transition to FAILED on timeout, which sends an e-stop and resets to IDLE.
     </div>
 
     <div class="state-desc">
       <strong>IDLE</strong>
-      <p>Waits for a voice command from the Gemini NLP node (<code>/nlp/response</code>) or a manual string trigger. Ignores new triggers until pipeline completes.</p>
+      <p>Waits for a voice command from the Gemini NLP node (<code>/nlp/response</code>) or a manual string trigger on <code>/coordinator/start</code>. Ignores new triggers while a task is in progress.</p>
     </div>
     <div class="state-desc">
       <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
-      <p>Tells the YOLO detector what to look for. Collects <strong>3 confident detections</strong> (≥0.4 confidence), averages their x/y to form a stable navigation goal, and publishes it to the navigator. Single YOLO frames are noisy; averaging before committing to navigation prevents wrong-direction drives.</p>
+      <p>Publishes the target label to the YOLO detector. Collects <strong>3 confident detections</strong> (≥0.4 confidence), averages their x/y to form a stable navigation goal, then publishes it to the navigator. Averaging multiple frames prevents wrong-direction drives from single noisy depth readings.</p>
     </div>
     <div class="state-desc">
       <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 90s)</span>
-      <p>Waits for <code>/coordinator/nav_complete</code>. Upon arrival, resets all perception buffers and stamps a minimum timestamp—any pose detected while the robot was moving is discarded (TF accuracy degrades during motion).</p>
+      <p>Waits for <code>/coordinator/nav_complete</code> from <code>navigate_to_object.py</code>. The robot drives to a standoff ~0.4m in front of the object and aligns yaw. On arrival, the coordinator tilts the camera down (0.0 pan, 0.5 rad tilt) and transitions to PAUSE.</p>
     </div>
     <div class="state-desc">
-      <strong>REDETECTING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
-      <p>At close range (~0.4m), collects 3 more detections—all from the <em>same camera pan/tilt angle</em>. If the camera moves, the buffer resets, preventing cross-angle averaging artifacts. If no object is found, sweeps across 6 pan/tilt positions. Close-range depth is far more accurate for arm planning than distant estimates.</p>
+      <strong>PAUSE</strong>
+      <p>A configurable settling delay (default 3 s) that lets the robot stop moving and stale perception data age out before pickup is triggered. No signals are sent; the coordinator simply waits.</p>
     </div>
     <div class="state-desc">
-      <strong>PICKING UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 60s)</span>
-      <p>Fires the pickup trigger and waits for the arm node to report success or failure.</p>
+      <strong>PICKING_UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 120s)</span>
+      <p>Publishes an <code>Empty</code> trigger to the pickup node and waits for success/failure.<br/>
+      <em>Task 1 (<code>task1_pickup.py</code>):</em> APPROACH → DESCEND → GRASP → LIFT — holds the object at lift height.<br/>
+      <em>Task 2 (<code>task2_pickup.py</code>):</em> APPROACH → DESCEND → GRASP → LIFT → DROP — moves arm 25 cm right and releases into bowl/bin.</p>
+    </div>
+    <div class="state-desc">
+      <strong>RETURNING</strong> <span style="color:#484f58;font-size:0.8rem;">(Task 1 only · timeout: 120s)</span>
+      <p>Publishes <code>/coordinator/return_to_origin</code>. The navigation node drives the robot back to the saved start position (0, 0). Transitions to DONE when <code>nav_complete</code> arrives.</p>
     </div>
     <div class="state-desc">
       <strong>DONE / FAILED</strong>
-      <p>DONE waits 2s for settling, then returns to IDLE. FAILED sends an emergency stop and returns to IDLE immediately.</p>
+      <p>DONE logs success, waits 2 s, returns to IDLE. FAILED publishes a zero-velocity e-stop to <code>/cmd_vel</code> and returns to IDLE immediately.</p>
     </div>
   </div>
 
@@ -497,12 +546,11 @@
       </p>
     </div>
     <div class="card">
-      <h3>🦾 Arm / Pickup Node</h3>
+      <h3>🦾 Arm / Pickup Nodes</h3>
       <p style="font-size:0.875rem;">
-        Executes a 5-phase arm state machine using the <strong>mink IK</strong> library.
-        All waypoints use a top-down grasp orientation. A −0.07m Y offset compensates
-        for the systematic error between camera-reported position and gripper contact point.
-        Reports success/failure to coordinator.
+        Two separate pickup nodes using the <strong>mink IK</strong> library with top-down grasps.<br/>
+        <strong>task1_pickup:</strong> 4 phases — APPROACH (10 cm above) → DESCEND (2 cm above) → GRASP → LIFT (25 cm up). Holds object.<br/>
+        <strong>task2_pickup:</strong> 5 phases — same start, adds DROP: moves arm 25 cm right and opens gripper. Includes internal camera sweep for close-range re-detection.
       </p>
     </div>
     <div class="card">
@@ -517,10 +565,13 @@
   </div>
 
   <!-- Camera sweep -->
-  <h3 style="margin-top:2rem;">Camera Sweep During Redetection</h3>
+  <h3 style="margin-top:2rem;">Camera Sweep in Task 2 Pickup</h3>
   <p>
-    If the object is not immediately visible at the standoff position, the coordinator
-    systematically sweeps the pan-tilt camera across 6 positions before timing out:
+    If the object is not immediately visible at the standoff position,
+    <code>task2_pickup.py</code> internally sweeps the pan-tilt camera across
+    6 positions before declaring failure. The sweep uses the same fixed angle
+    at which the first confident detection arrives—preventing cross-angle depth
+    mixing artifacts:
   </p>
   <pre>
   Position 1: pan= 0.0,  tilt=0.5  (center, looking down steeply)
@@ -528,27 +579,24 @@
   Position 3: pan=-0.3,  tilt=0.5  (left)
   Position 4: pan=+0.3,  tilt=0.5  (right)
   Position 5: pan=-0.3,  tilt=0.3  (left, shallower)
-  Position 6: pan=+0.3,  tilt=0.3  (right, shallower)
+  Position 6: pan=+0.3,  tilt=0.3  (right, shallower)</pre>
 
-  The moment a confident detection arrives, the sweep freezes and waits for
-  the remaining samples at that exact angle (no cross-angle mixing).</pre>
-
-  <h3 style="margin-top:2rem;">Why Two Rounds of Pose Averaging?</h3>
+  <h3 style="margin-top:2rem;">Perception Strategy: SEARCHING + PAUSE</h3>
   <div class="card-grid card-grid-2" style="margin-top:1rem;">
     <div class="card">
-      <h3>Round 1 — SEARCHING (1–2m away)</h3>
+      <h3>SEARCHING — Navigation Goal</h3>
       <p style="font-size:0.875rem;">
-        Provides a stable navigation <em>direction</em>. Single-frame depth at distance
-        is noisy, so 3 averaged samples prevent wrong-direction navigation while
-        keeping the robot responsive.
+        Collects 3 confident YOLO detections from 1–2 m away and averages their x/y.
+        Single-frame depth at distance is noisy; averaging prevents wrong-direction
+        navigation while keeping the robot responsive.
       </p>
     </div>
     <div class="card">
-      <h3>Round 2 — REDETECTING (0.4m away)</h3>
+      <h3>PAUSE — Settling Before Pickup</h3>
       <p style="font-size:0.875rem;">
-        Provides a precise arm <em>target</em>. Close range gives better depth accuracy.
-        A timestamp filter discards any stale poses captured while the robot was still
-        in motion (when TF accuracy is lowest).
+        A 3-second delay after navigation lets the robot stop moving and stale
+        detection data age out. The pickup node waits for a fresh detection after
+        this window—ensuring the arm target comes from a stationary robot pose.
       </p>
     </div>
   </div>
@@ -645,11 +693,12 @@
       <div class="team-name">Esteban Rincon</div>
       <div class="team-role">Coordinator Pipeline · Perception · Manipulation</div>
       <ul class="team-contrib">
-        <li>Designed &amp; implemented the 6-state coordinator state machine</li>
-        <li>Built confidence filtering &amp; timestamp-based pose rejection</li>
-        <li>Camera pan-tilt sweep during REDETECTING</li>
+        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines</li>
+        <li>Built PAUSE-based settling strategy and confidence filtering</li>
+        <li>Camera pan-tilt sweep in task2_pickup for close-range re-detection</li>
+        <li>RETURNING state for Task 1 origin recovery</li>
         <li>GraspAnything-6D integration (pickup_anything.py)</li>
-        <li>PIPELINE_EXPLANATION.md &amp; COORDINATOR_README documentation</li>
+        <li>TASK1_README, TASK2_README &amp; pipeline documentation</li>
       </ul>
     </div>
 
@@ -738,11 +787,13 @@
     <div class="card">
       <h3>🔑 Key Files</h3>
       <ul class="team-contrib" style="font-size:0.875rem;">
-        <li><code>scripts/coordinator_node.py</code> — State machine</li>
+        <li><code>scripts/task1_coordinator.py</code> — Task 1 state machine</li>
+        <li><code>scripts/task2_coordinator.py</code> — Task 2 state machine</li>
         <li><code>scripts/detect_object_real.py</code> — Perception</li>
         <li><code>scripts/navigate_to_object.py</code> — Navigation</li>
-        <li><code>scripts/pickup.py</code> — Arm manipulation</li>
-        <li><code>launch/coordinator.launch.py</code> — Launch all nodes</li>
+        <li><code>scripts/task1_pickup.py</code> — Task 1 arm (hold)</li>
+        <li><code>scripts/task2_pickup.py</code> — Task 2 arm (drop)</li>
+        <li><code>launch/task1.launch.py</code> · <code>task2.launch.py</code></li>
       </ul>
     </div>
   </div>
@@ -756,9 +807,18 @@ cd collaborative-robotics-2026-group5
 # Build
 cd ros2_ws && source /opt/ros/humble/setup.bash && colcon build
 
-# Run the full coordinator pipeline on real hardware
+# Terminal 1 — Robot hardware + motion planner
 source setup_env.bash
-ros2 launch tidybot_bringup coordinator.launch.py target_label:=banana</pre>
+ros2 launch tidybot_bringup real.launch.py use_planner:=true
+
+# Terminal 2 — Task 1: pick up and return to start
+ros2 launch tidybot_bringup task1.launch.py
+
+# Terminal 2 — Task 2: pick up and drop in bowl/bin
+ros2 launch tidybot_bringup task2.launch.py
+
+# Manual trigger (no voice needed)
+ros2 topic pub /coordinator/start std_msgs/String "data: apple" --once</pre>
 
   <h3 style="margin-top:1.5rem;">System Requirements</h3>
   <div class="card-grid card-grid-3" style="margin-top:1rem;">
