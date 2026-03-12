@@ -10,14 +10,17 @@ State machine:
     Any state -> FAILED -> IDLE (on timeout/error)
 
 Usage:
-    # Launch all pipeline nodes together:
+    # Terminal 1 — Robot hardware + motion planner:
+    ros2 launch tidybot_bringup real.launch.py use_planner:=true
+
+    # Terminal 2 — Full Task 2 pipeline:
     ros2 launch tidybot_bringup task2.launch.py
 
-    # Manual trigger (no NLP needed):
-    ros2 topic pub /coordinator/start std_msgs/String "data: banana" --once
+    # Terminal 3 — Voice input (optional):
+    ros2 run tidybot_control nlp_interface_node
 
-    # Monitor status:
-    ros2 topic echo /coordinator/status
+    # Manual trigger (no voice needed):
+    ros2 topic pub /coordinator/start std_msgs/String "data: banana" --once
 """
 
 import json
