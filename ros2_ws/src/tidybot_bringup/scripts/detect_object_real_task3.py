@@ -154,6 +154,16 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("val_min", 60)      # minimum value / brightness (0–255)
         self.declare_parameter("min_area_px", 500) # minimum contour area in pixels
 
+        # -- Hardcoded pose fallback ------------------------------------------
+        # When use_hardcoded_pose=True the node skips depth estimation entirely
+        # and publishes a fixed pose in world_frame.  Useful for close-up pickup
+        # where the depth camera is unreliable.
+        # Defaults: pillow at (x=0.0, y=0.2, z=0.15) in base_link frame.
+        self.declare_parameter("use_hardcoded_pose", False)
+        self.declare_parameter("hardcoded_x", 0.0)   # m — centre left/right
+        self.declare_parameter("hardcoded_y", 0.2)   # m — forward from base
+        self.declare_parameter("hardcoded_z", 0.15)  # m — height above ground
+
         # Retrieve camera / TF params
         self.rgb_topic = str(self.get_parameter("rgb_topic").value)
         self.depth_topic = str(self.get_parameter("depth_topic").value)
@@ -176,6 +186,11 @@ class ObjectDetectorNode(Node):
         self.sat_min = int(self.get_parameter("sat_min").value)
         self.val_min = int(self.get_parameter("val_min").value)
         self.min_area_px = int(self.get_parameter("min_area_px").value)
+
+        self.use_hardcoded_pose = bool(self.get_parameter("use_hardcoded_pose").value)
+        self.hardcoded_x = float(self.get_parameter("hardcoded_x").value)
+        self.hardcoded_y = float(self.get_parameter("hardcoded_y").value)
+        self.hardcoded_z = float(self.get_parameter("hardcoded_z").value)
 
         # -- State ------------------------------------------------------------
         self.bridge = CvBridge()
@@ -232,6 +247,14 @@ class ObjectDetectorNode(Node):
             f"sat>={self.sat_min}, val>={self.val_min}"
         )
         self.get_logger().info(f"  Min contour area: {self.min_area_px} px")
+        if self.use_hardcoded_pose:
+            self.get_logger().warn(
+                f"  HARDCODED POSE MODE — depth estimation disabled. "
+                f"Publishing fixed pose: ({self.hardcoded_x}, {self.hardcoded_y}, {self.hardcoded_z}) "
+                f"in {self.world_frame}"
+            )
+        else:
+            self.get_logger().info("  Pose mode: depth estimation (camera back-projection)")
 
     # ------------------------------------------------------------------
     # Subscription callbacks (verbatim from detect_object_real.py)
@@ -341,34 +364,42 @@ class ObjectDetectorNode(Node):
         cx_px, cy_px — contour centroid in image pixels (from cv2.moments).
         mask         — binary HSV mask used to sample depth only over the object.
         """
-        if any(k is None for k in [self.fx, self.fy, self.cx, self.cy]):
-            self._warn_pose_throttled("No camera intrinsics yet; skipping /perception/object_pose.")
-            return None
-
-        u, v = cx_px, cy_px
-        z_m = self._depth_from_mask(mask)
-        if z_m is None:
-            self._warn_pose_throttled("Invalid depth from mask; skipping /perception/object_pose.")
-            return None
-
-        x_cam, y_cam, z_cam = deproject_uvz_to_camera_xyz(
-            float(u), float(v), z_m, self.fx, self.fy, self.cx, self.cy
-        )
-
-        try:
-            tf_msg = self.tf_buffer.lookup_transform(
-                self.world_frame,
-                self.camera_frame,
-                rclpy.time.Time(),
-                timeout=Duration(seconds=0),
+        if self.use_hardcoded_pose:
+            x_w, y_w, z_w = self.hardcoded_x, self.hardcoded_y, self.hardcoded_z
+            self.get_logger().info(
+                f"[HARDCODED POSE] publishing ({x_w:.3f}, {y_w:.3f}, {z_w:.3f}) "
+                f"in {self.world_frame} — depth estimation bypassed",
+                throttle_duration_sec=2.0,
             )
-        except Exception as exc:
-            self._warn_pose_throttled(
-                f"TF lookup failed ({self.world_frame} <- {self.camera_frame}): {exc}"
-            )
-            return None
+        else:
+            if any(k is None for k in [self.fx, self.fy, self.cx, self.cy]):
+                self._warn_pose_throttled("No camera intrinsics yet; skipping /perception/object_pose.")
+                return None
 
-        x_w, y_w, z_w = transform_point(tf_msg, (x_cam, y_cam, z_cam))
+            u, v = cx_px, cy_px
+            z_m = self._depth_from_mask(mask)
+            if z_m is None:
+                self._warn_pose_throttled("Invalid depth from mask; skipping /perception/object_pose.")
+                return None
+
+            x_cam, y_cam, z_cam = deproject_uvz_to_camera_xyz(
+                float(u), float(v), z_m, self.fx, self.fy, self.cx, self.cy
+            )
+
+            try:
+                tf_msg = self.tf_buffer.lookup_transform(
+                    self.world_frame,
+                    self.camera_frame,
+                    rclpy.time.Time(),
+                    timeout=Duration(seconds=0),
+                )
+            except Exception as exc:
+                self._warn_pose_throttled(
+                    f"TF lookup failed ({self.world_frame} <- {self.camera_frame}): {exc}"
+                )
+                return None
+
+            x_w, y_w, z_w = transform_point(tf_msg, (x_cam, y_cam, z_cam))
 
         pose_msg = PoseStamped()
         pose_msg.header.stamp = image_header.stamp
