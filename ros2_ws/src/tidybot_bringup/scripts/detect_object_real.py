@@ -110,7 +110,7 @@ class ObjectDetectorNode(Node):
         self.declare_parameter("camera_frame", "camera_color_optical_frame")
         self.declare_parameter("world_frame", "base_link")
         self.declare_parameter("target_label", "apple")
-        self.declare_parameter("model_path", "yolov8n.pt")
+        self.declare_parameter("model_path", "yolo11n.pt")
         self.declare_parameter("conf_threshold", 0.35)
         self.declare_parameter("imgsz", 640)
         self.declare_parameter("publish_debug_image", True)
