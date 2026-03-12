@@ -299,37 +299,56 @@ class ObjectDetectorNode(Node):
             self.last_pose_warn_time = now
             self.get_logger().warn(text)
 
-    def _depth_at_uv_m(self, u: int, v: int, radius: int = 10) -> Optional[float]:
+    def _depth_from_mask(self, mask: np.ndarray) -> Optional[float]:
+        """Return 20th-percentile depth of pixels that are inside the HSV mask.
+
+        Using the 20th percentile (instead of median) selects the front surface
+        of the object and ignores background pixels that leaked into the mask.
+        Only pixels with mask > 0 AND valid depth are considered.
+        Falls back to a centre-crop median if the depth image is a different
+        resolution than the colour image (unaligned fallback topic).
+        """
         if self.latest_depth is None:
             return None
 
-        h, w = self.latest_depth.shape[:2]
-        u0 = max(0, u - radius)
-        u1 = min(w, u + radius + 1)
-        v0 = max(0, v - radius)
-        v1 = min(h, v + radius + 1)
+        depth = self.latest_depth.astype(np.float32)
 
-        patch = self.latest_depth[v0:v1, u0:u1].astype(np.float32)
-        valid = patch[(patch > 0) & np.isfinite(patch)]
+        # If depth and mask have different shapes (fallback unaligned topic),
+        # resize mask to match depth so indexing still works.
+        if depth.shape[:2] != mask.shape[:2]:
+            mask = cv2.resize(
+                mask, (depth.shape[1], depth.shape[0]), interpolation=cv2.INTER_NEAREST
+            )
+
+        valid = depth[(mask > 0) & (depth > 0) & np.isfinite(depth)]
         if valid.size == 0:
             return None
 
-        z = float(np.median(valid))
+        z = float(np.percentile(valid, 20))
         if self.depth_encoding in ("16uc1", "mono16"):
             z = z / 1000.0
         return z
 
-    def _publish_pose(self, x: int, y: int, w: int, h: int, image_header) -> Optional[Tuple[float, float, float]]:
-        """Publish 3D pose and return (x, y, z) in world frame, or None."""
+    def _publish_pose(
+        self,
+        cx_px: int,
+        cy_px: int,
+        mask: np.ndarray,
+        image_header,
+    ) -> Optional[Tuple[float, float, float]]:
+        """Publish 3D pose and return (x, y, z) in world frame, or None.
+
+        cx_px, cy_px — contour centroid in image pixels (from cv2.moments).
+        mask         — binary HSV mask used to sample depth only over the object.
+        """
         if any(k is None for k in [self.fx, self.fy, self.cx, self.cy]):
             self._warn_pose_throttled("No camera intrinsics yet; skipping /perception/object_pose.")
             return None
 
-        u = int(round(x + 0.5 * w))
-        v = int(round(y + 0.5 * h))
-        z_m = self._depth_at_uv_m(u, v)
+        u, v = cx_px, cy_px
+        z_m = self._depth_from_mask(mask)
         if z_m is None:
-            self._warn_pose_throttled("Invalid depth at bbox center; skipping /perception/object_pose.")
+            self._warn_pose_throttled("Invalid depth from mask; skipping /perception/object_pose.")
             return None
 
         x_cam, y_cam, z_cam = deproject_uvz_to_camera_xyz(
@@ -409,7 +428,16 @@ class ObjectDetectorNode(Node):
         total_pixels = rw * rh
         conf = float(red_pixels) / float(max(total_pixels, 1))
 
-        return (rx, ry, rw, rh, conf, self.LABEL)
+        # Contour centroid via moments — more accurate than bbox midpoint
+        M = cv2.moments(best_cnt)
+        if M['m00'] > 0:
+            cx_m = int(round(M['m10'] / M['m00']))
+            cy_m = int(round(M['m01'] / M['m00']))
+        else:
+            cx_m = rx + rw // 2
+            cy_m = ry + rh // 2
+
+        return (rx, ry, rw, rh, conf, self.LABEL, cx_m, cy_m, mask)
 
     # ------------------------------------------------------------------
     # Main RGB callback
@@ -430,12 +458,12 @@ class ObjectDetectorNode(Node):
                 self.publish_debug(bgr, None, msg.header)
             return
 
-        x, y, w, h, conf, label = detection
+        x, y, w, h, conf, label, cx_m, cy_m, mask = detection
         self.publish_found(True)
         self.publish_label(label)
         self.publish_confidence(conf)
         self.publish_bbox((x, y, w, h))
-        pose_xyz = self._publish_pose(x, y, w, h, msg.header)
+        pose_xyz = self._publish_pose(cx_m, cy_m, mask, msg.header)
         if self.publish_debug_image:
             self.publish_debug(bgr, detection, msg.header, pose_xyz)
 
@@ -492,10 +520,12 @@ class ObjectDetectorNode(Node):
     ):
         vis = bgr.copy()
         if detection is not None:
-            x, y, w, h, conf, label = detection
+            x, y, w, h, conf, label, cx_m, cy_m, _mask = detection
             cv2.rectangle(vis, (x, y), (x + w, y + h), (0, 220, 0), 2)
             text = f"{label} {conf:.2f}"
             cv2.putText(vis, text, (x, max(25, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 220, 0), 2)
+            # Draw contour centroid (used for 3D back-projection)
+            cv2.circle(vis, (cx_m, cy_m), 6, (0, 0, 255), -1)
             if pose_xyz is not None:
                 pose_text = f"({pose_xyz[0]:.2f}, {pose_xyz[1]:.2f}, {pose_xyz[2]:.2f})"
                 cv2.putText(vis, pose_text, (x, y + h + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 180, 255), 2)
