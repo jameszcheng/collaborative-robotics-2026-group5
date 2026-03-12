@@ -313,6 +313,11 @@ class NavigateToObject(Node):
             PoseStamped, '/coordinator/nav_goal', self._nav_goal_callback, 10
         )
 
+        # Coordinator return-to-origin: navigate back to (0, 0) in origin frame after pickup
+        self.create_subscription(
+            Empty, '/coordinator/return_to_origin', self._return_to_origin_cb, 10
+        )
+
         # --- Control timer (50 Hz) ---
         self.create_timer(0.02, self.control_loop)
 
@@ -349,6 +354,20 @@ class NavigateToObject(Node):
             f'Nav goal injected directly: base_link=({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}) '
             f'-> odom=({odom_x:.3f}, {odom_y:.3f})'
         )
+
+    # ------------------------------------------------------------------
+    # Return-to-origin callback
+    # ------------------------------------------------------------------
+    def _return_to_origin_cb(self, msg: Empty):
+        """Coordinator requests return to origin (0, 0) after pickup."""
+        self.get_logger().info('Return-to-origin command received. Navigating back to (0, 0)...')
+        self.mode = 'goto'
+        # (0, 0) rotated by any angle is still (0, 0), no command_frame rotation needed
+        self.waypoints = [(0.0, 0.0)]
+        self.waypoint_index = 0
+        self._final_yaw_done = False
+        self.start_time = None
+        self.running = True
 
     # ------------------------------------------------------------------
     # Object pose callback
@@ -859,6 +878,7 @@ class NavigateToObject(Node):
                 if self.running:
                     self.running = False
                     self.get_logger().info('All waypoints completed.')
+                    self.nav_complete_pub.publish(Bool(data=True))
                     self.save_results()
                 return
 

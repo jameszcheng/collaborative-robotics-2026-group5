@@ -3,7 +3,7 @@
 task1_pickup.py — Pick up an object on real hardware using a simple state machine.
 
 State machine:
-    approach -> descend -> grasp -> lift -> drop -> done
+    approach -> descend -> grasp -> lift -> done (gripper remains closed, holding object)
 
 Standalone usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
@@ -33,7 +33,6 @@ class PickupState(Enum):
     DESCEND = auto()
     GRASP = auto()
     LIFT = auto()
-    DROP = auto()
     DONE = auto()
 
 
@@ -316,15 +315,11 @@ class PickupNode(Node):
         approach_pose = self.create_pose(x, y, z + self.APPROACH_HEIGHT, qw, qx, qy, qz)
         grasp_pose = self.create_pose(x, y, z + self.GRASP_HEIGHT, qw, qx, qy, qz)
         lift_pose = self.create_pose(x, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
-        # Move right 25cm (negative x in base_link) then drop
-        drop_pose = self.create_pose(x - 0.25, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
-
         self.get_logger().info('')
         self.get_logger().info('Pickup waypoints:')
         self.get_logger().info(f'  approach: ({x:.3f}, {y:.3f}, {z + self.APPROACH_HEIGHT:.3f})')
         self.get_logger().info(f'  descend:  ({x:.3f}, {y:.3f}, {z + self.GRASP_HEIGHT:.3f})')
         self.get_logger().info(f'  lift:     ({x:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
-        self.get_logger().info(f'  drop:     ({x - 0.25:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
         if self.auto_start or self._pickup_triggered:
             self.get_logger().info('Auto-starting pickup sequence (coordinator mode)')
         else:
@@ -350,12 +345,6 @@ class PickupNode(Node):
             elif self.state == PickupState.LIFT:
                 if not self.plan_and_execute(lift_pose, duration=10.0):
                     return False
-                self.transition_to(PickupState.DROP)
-
-            elif self.state == PickupState.DROP:
-                if not self.plan_and_execute(drop_pose, duration=10.0):
-                    return False
-                self.open_gripper()
                 self.transition_to(PickupState.DONE)
 
             time.sleep(0.3)
