@@ -5,6 +5,8 @@ task1_pickup.py — Pick up an object on real hardware using a simple state mach
 State machine:
     approach -> descend -> grasp -> lift -> done (gripper remains closed, holding object)
 
+The banana is NEVER dropped — the gripper stays closed after lifting.
+
 Standalone usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
     ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
@@ -39,14 +41,14 @@ class PickupState(Enum):
 class PickupNode(Node):
     """Plan and execute a real-world block pickup using perception or fixed defaults."""
 
-    ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
+    ORIENT_FINGERS_DOWN = (0.707107, 0.0, 0.707107, 0.0)  # (qw, qx, qy, qz) — 90° rotated for horizontal banana
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.17
-    GRASP_HEIGHT = 0.06
+    APPROACH_HEIGHT = 0.1
+    GRASP_HEIGHT = 0.02
     LIFT_HEIGHT = 0.25
-    Y_OFFSET = -0.07  # forward offset, negative = further from robot (meters)
+    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
     ARM_NAME = 'right'
@@ -64,7 +66,6 @@ class PickupNode(Node):
         # Coordinator publishers/subscribers
         self.pickup_complete_pub = self.create_publisher(Bool, '/coordinator/pickup_complete', 10)
         self.create_subscription(Empty, '/coordinator/pickup_trigger', self._pickup_trigger_cb, 10)
-        self.create_subscription(PoseStamped, '/coordinator/object_pose', self._coordinator_pose_cb, 10)
 
         self.plan_client = self.create_client(PlanToTarget, '/plan_to_target')
 
@@ -83,6 +84,11 @@ class PickupNode(Node):
         self.create_subscription(PoseStamped, '/perception/object_pose', self._object_pose_cb, 10)
         self.create_subscription(Float32, '/perception/object_confidence', self._object_confidence_cb, 10)
         self.create_subscription(String, '/perception/object_label', self._object_label_cb, 10)
+
+        # Pan-tilt camera control
+        self.pan_tilt_pub = self.create_publisher(
+            Float64MultiArray, '/camera/pan_tilt_cmd', 10
+        )
 
         # Direct interbotix command topics
         self.arm_group_pub = self.create_publisher(
@@ -111,44 +117,71 @@ class PickupNode(Node):
             self._latest_positions[name] = pos
 
     def _object_found_cb(self, msg: Bool):
-        """Callback for /perception/object_found."""
-        self.object_found = msg.data
+        """Callback for /perception/object_found.
+
+        Latches on True — only explicit resets (trigger cb / settle loop)
+        clear it back to False.  This prevents a single no-detection frame
+        from overwriting a valid detection before the pickup node reads it.
+        """
+        if msg.data:
+            self.object_found = True
 
     def _object_pose_cb(self, msg: PoseStamped):
-        """Callback for /perception/object_pose."""
+        """Callback for /perception/object_pose (only published on detection)."""
         self.object_pose = msg
 
     def _object_confidence_cb(self, msg: Float32):
-        """Callback for /perception/object_confidence."""
-        self.object_confidence = msg.data
+        """Callback for /perception/object_confidence. Latches on positive values."""
+        if msg.data > 0.0:
+            self.object_confidence = msg.data
 
     def _object_label_cb(self, msg: String):
-        """Callback for /perception/object_label."""
-        self.object_label = msg.data
+        """Callback for /perception/object_label. Latches on non-empty values."""
+        if msg.data:
+            self.object_label = msg.data
 
     def _pickup_trigger_cb(self, msg: Empty):
-        """Coordinator triggers pickup — skip the input() prompt."""
-        self.get_logger().info('Pickup triggered by coordinator')
+        """Coordinator triggers pickup — clear stale perception and start fresh."""
+        self.get_logger().info('Pickup triggered by coordinator — clearing stale perception data')
+        self.object_found = False
+        self.object_pose = None
+        self.object_confidence = 0.0
+        self.object_label = ""
         self._pickup_triggered = True
-
-    def _coordinator_pose_cb(self, msg: PoseStamped):
-        """Refined averaged pose from coordinator — overrides raw perception in auto_start mode."""
-        if self.auto_start:
-            self.object_pose = msg
-            self.object_found = True
-            self.get_logger().info(
-                f'Using coordinator refined pose: '
-                f'({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}, {msg.pose.position.z:.3f})'
-            )
 
     def _drain_callbacks(self, count: int = 30):
         """Process multiple pending callbacks to avoid missing perception messages."""
         for _ in range(count):
             rclpy.spin_once(self, timeout_sec=0.005)
 
-    def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
-        """Wait for a valid object detection with sufficient confidence."""
+    def _check_detection(self, min_confidence: float = 0.4) -> bool:
+        """Drain callbacks and return True if a valid detection is available."""
+        self._drain_callbacks()
+        return (self.object_found
+                and self.object_pose is not None
+                and self.object_confidence >= min_confidence)
+
+    def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5,
+                                   settle_time: float = 2.0) -> bool:
+        """Wait for a valid object detection with sufficient confidence.
+
+        Args:
+            settle_time: Seconds to wait (discarding detections) so the camera
+                         tilt physically settles and TF propagates before we
+                         accept a pose.
+        """
         self.get_logger().info(f'Waiting for object detection (min confidence: {min_confidence:.2f})...')
+        if settle_time > 0.0:
+            self.get_logger().info(f'Letting camera settle for {settle_time:.1f}s before accepting detections...')
+            settle_end = time.time() + settle_time
+            while time.time() < settle_end:
+                # Drain and discard detections while camera/TF settles
+                self._drain_callbacks()
+                self.object_found = False
+                self.object_pose = None
+                self.object_confidence = 0.0
+                time.sleep(0.05)
+            self.get_logger().info('Camera settled — now accepting detections.')
         start = time.time()
         while (time.time() - start) < timeout:
             self._drain_callbacks()
@@ -164,6 +197,14 @@ class PickupNode(Node):
                 return True
             time.sleep(0.05)
         return False
+
+    def send_pan_tilt(self, pan: float, tilt: float, duration: float = 1.0):
+        """Send pan-tilt command, publishing repeatedly for the given duration."""
+        msg = Float64MultiArray()
+        msg.data = [pan, tilt]
+        for _ in range(int(duration * 20)):
+            self.pan_tilt_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=0.05)
 
     def wait_for_joint_states(self, timeout: float = 10.0) -> bool:
         start = time.time()
@@ -197,7 +238,7 @@ class PickupNode(Node):
         pose.orientation.z = qz
         return pose
 
-    def call_service_sync(self, request: PlanToTarget.Request, timeout_sec: float = 20.0):
+    def call_service_sync(self, request: PlanToTarget.Request, timeout_sec: float = 30.0):
         future = self.plan_client.call_async(request)
         rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
 
@@ -222,7 +263,7 @@ class PickupNode(Node):
         pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
         self.get_logger().info(f'Planning+executing {self.arm_name} to {pos_str}')
 
-        result = self.call_service_sync(request)
+        result = self.call_service_sync(request, timeout_sec=duration + 20.0)
         if result is None:
             return False
 
@@ -357,7 +398,7 @@ class PickupNode(Node):
 def _run_pickup_once(node):
     """Run the pickup pipeline once: wait for detection, then execute state machine."""
     node.get_logger().info('Waiting for object detection...')
-    if not node.wait_for_object_detection(timeout=15.0, min_confidence=0.4):
+    if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
         node.get_logger().error('No object detected. Aborting.')
         node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
         node.pickup_complete_pub.publish(Bool(data=False))
