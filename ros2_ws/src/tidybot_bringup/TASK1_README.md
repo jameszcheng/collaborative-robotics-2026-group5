@@ -89,11 +89,11 @@ Any state ───────────────────────�
 
 ### PICKING_UP
 - Publishes an `Empty` message on `/coordinator/pickup_trigger`
-- `task1_pickup.py` receives the trigger and runs its own camera sweep + re-detection internally, then:
-  1. **APPROACH** — open gripper, plan arm to approach height (17 cm above object)
-  2. **DESCEND** — plan arm down to grasp height (6 cm above object)
+- `task1_pickup.py` clears stale perception on receipt and waits for a fresh detection (settle delay handled by PAUSE), then:
+  1. **APPROACH** — open gripper, plan arm to approach height (10 cm above object)
+  2. **DESCEND** — plan arm down to grasp height (2 cm above object)
   3. **GRASP** — close gripper with sustained force
-  4. **LIFT** — plan arm up to lift height (25 cm above object)
+  4. **LIFT** — plan arm up to lift height (25 cm above object); gripper stays closed (no drop)
 - Publishes `True` on `/coordinator/pickup_complete` on success, `False` on failure
 
 ### RETURNING
