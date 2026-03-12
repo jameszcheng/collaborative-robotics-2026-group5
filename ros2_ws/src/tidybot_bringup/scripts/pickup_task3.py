@@ -24,10 +24,12 @@ import time
 from enum import Enum, auto
 import traceback
 
+import math
 import numpy as np
 import rclpy
-from geometry_msgs.msg import Pose, PoseStamped
+from geometry_msgs.msg import Pose, PoseStamped, Twist
 from interbotix_xs_msgs.msg import JointGroupCommand
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Empty, Float32, Float64MultiArray, String
@@ -41,7 +43,9 @@ class PickupState(Enum):
     L_APPROACH = auto()   # left arm approaches above left grasp point
     L_DESCEND  = auto()   # left arm descends to left grasp point
     L_GRASP    = auto()   # left gripper closes
-    LIFT       = auto()   # both arms lift together (right first, then left)
+    LIFT       = auto()   # both arms lift together
+    ROTATE     = auto()   # rotate base 90° right
+    RELEASE    = auto()   # open both grippers to drop pillow
     DONE       = auto()
 
 
@@ -115,6 +119,11 @@ class PickupNode(Node):
         self.left_gripper_pub = self.create_publisher(
             Float64MultiArray, '/left_gripper/cmd', 10)
 
+        # Base control for rotate-after-lift
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self._current_yaw = 0.0
+        self.create_subscription(Odometry, '/odom', self._odom_cb, 10)
+
         self.get_logger().info('=' * 60)
         self.get_logger().info('TidyBot2 Bimanual Pickup Node (Task 3)')
         self.get_logger().info('  right arm → right end of pillow  (y - 7 cm)')
@@ -161,6 +170,12 @@ class PickupNode(Node):
                 f'Using coordinator refined pose: '
                 f'({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}, {msg.pose.position.z:.3f})'
             )
+
+    def _odom_cb(self, msg: Odometry):
+        q = msg.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self._current_yaw = math.atan2(siny_cosp, cosy_cosp)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -321,6 +336,40 @@ class PickupNode(Node):
         self.get_logger().info(f'Closing {arm_name} gripper...')
         self.set_gripper(arm_name, 1.0, duration=2.0, hold=True)
 
+    def rotate_base(self, angle_rad: float, omega: float = 0.5, tolerance: float = 0.05):
+        """Rotate the base by angle_rad (positive = left / CCW). Blocks until done."""
+        self.get_logger().info(f'Rotating base by {math.degrees(angle_rad):.1f}°...')
+        # Let odom update
+        for _ in range(10):
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+        start_yaw = self._current_yaw
+        target_yaw = start_yaw + angle_rad
+        # Wrap to [-pi, pi]
+        target_yaw = math.atan2(math.sin(target_yaw), math.cos(target_yaw))
+
+        twist = Twist()
+        direction = 1.0 if angle_rad > 0 else -1.0
+        twist.angular.z = direction * abs(omega)
+
+        while True:
+            rclpy.spin_once(self, timeout_sec=0.02)
+            yaw_error = math.atan2(
+                math.sin(target_yaw - self._current_yaw),
+                math.cos(target_yaw - self._current_yaw),
+            )
+            if abs(yaw_error) < tolerance:
+                break
+            # Slow down as we approach target
+            speed = max(0.15, min(abs(omega), abs(yaw_error) * 2.0))
+            twist.angular.z = (1.0 if yaw_error > 0 else -1.0) * speed
+            self.cmd_vel_pub.publish(twist)
+
+        # Stop
+        self.cmd_vel_pub.publish(Twist())
+        rclpy.spin_once(self, timeout_sec=0.05)
+        self.get_logger().info(f'Rotation complete. Current yaw: {math.degrees(self._current_yaw):.1f}°')
+
     def go_to_sleep(self, arm_name: str, max_joint_speed: float = 0.5):
         """Send one arm to sleep pose using cosine interpolation."""
         self.get_logger().info(f'Moving {arm_name} arm to sleep pose...')
@@ -426,6 +475,16 @@ class PickupNode(Node):
                 self.get_logger().info('Lifting both arms simultaneously...')
                 if not self.plan_and_execute_both(r_lift, l_lift, duration=5.0):
                     return False
+                self.transition_to(PickupState.ROTATE)
+
+            elif self.state == PickupState.ROTATE:
+                self.rotate_base(math.radians(90))  # rotate left 90°
+                self.transition_to(PickupState.RELEASE)
+
+            elif self.state == PickupState.RELEASE:
+                self.get_logger().info('Releasing pillow — opening both grippers...')
+                self.open_gripper('right')
+                self.open_gripper('left')
                 self.transition_to(PickupState.DONE)
 
             time.sleep(0.3)
