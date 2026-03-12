@@ -2,11 +2,15 @@
 """
 coordinator_node.py — Orchestrates the full pick-and-place pipeline.
 
-Sequences: NLP/manual trigger -> perception -> navigation -> re-detection -> pickup
+Sequences: NLP/manual trigger -> perception -> navigation -> pickup
 
-State machine:
+State machine (skip_redetect=True, default):
+    IDLE -> SEARCHING -> NAVIGATING -> PICKING_UP -> DONE -> IDLE
+
+State machine (skip_redetect=False):
     IDLE -> SEARCHING -> NAVIGATING -> REDETECTING -> PICKING_UP -> DONE -> IDLE
-    Any state -> FAILED -> IDLE (on timeout/error)
+
+Any state -> FAILED -> IDLE (on timeout/error)
 
 Usage:
     # Launch all pipeline nodes together:
@@ -51,6 +55,9 @@ class CoordinatorNode(Node):
         self.declare_parameter('min_confidence', 0.4)
         self.declare_parameter('redetect_samples', 3)
         self.declare_parameter('search_samples', 3)
+        # skip_redetect=True: go directly NAVIGATING->PICKING_UP (pickup uses hardcoded coords)
+        # skip_redetect=False: run REDETECTING phase to collect fresh close-range pose samples
+        self.declare_parameter('skip_redetect', True)
 
         self.detect_timeout = float(self.get_parameter('detect_timeout').value)
         self.redetect_timeout = float(self.get_parameter('redetect_timeout').value)
@@ -59,6 +66,7 @@ class CoordinatorNode(Node):
         self.min_confidence = float(self.get_parameter('min_confidence').value)
         self.redetect_samples = int(self.get_parameter('redetect_samples').value)
         self.search_samples = int(self.get_parameter('search_samples').value)
+        self.skip_redetect = bool(self.get_parameter('skip_redetect').value)
 
         # State
         self.state = State.IDLE
@@ -300,24 +308,34 @@ class CoordinatorNode(Node):
         elif self.state == State.NAVIGATING:
             if self._nav_complete:
                 self.get_logger().info('Navigation complete! Reached standoff position.')
-                self._set_state(State.REDETECTING)
-                self._redetect_poses = []
-                self.object_pose = None
-                self.object_confidence = 0.0
-                self._object_pose_stamp_sec = 0.0
-                self._redetect_sweep_active = False
-                self._redetect_sweep_index = 0
-                self._redetect_sweep_start = time.time()
-                self._redetect_hold_start = time.time()
-                self._redetect_detected_hold_start = 0.0
-                self._redetect_min_pose_stamp_sec = (
-                    float(self.get_clock().now().nanoseconds) * 1e-9
-                )
-                self.get_logger().info(
-                    f'Re-detecting object at close range... holding current camera pose for '
-                    f'{self._redetect_sweep_settle_time:.0f}s before any sweep '
-                    f'({self.redetect_samples} fresh samples needed)'
-                )
+                if self.skip_redetect:
+                    self.get_logger().info(
+                        'skip_redetect=True — skipping REDETECTING, going directly to PICKING_UP '
+                        '(pickup will use hardcoded grasp coordinates)'
+                    )
+                    self._set_state(State.PICKING_UP)
+                    self._pickup_complete = None
+                    self.get_logger().info('Triggering pickup sequence...')
+                    self.pickup_trigger_pub.publish(Empty())
+                else:
+                    self._set_state(State.REDETECTING)
+                    self._redetect_poses = []
+                    self.object_pose = None
+                    self.object_confidence = 0.0
+                    self._object_pose_stamp_sec = 0.0
+                    self._redetect_sweep_active = False
+                    self._redetect_sweep_index = 0
+                    self._redetect_sweep_start = time.time()
+                    self._redetect_hold_start = time.time()
+                    self._redetect_detected_hold_start = 0.0
+                    self._redetect_min_pose_stamp_sec = (
+                        float(self.get_clock().now().nanoseconds) * 1e-9
+                    )
+                    self.get_logger().info(
+                        f'Re-detecting object at close range... holding current camera pose for '
+                        f'{self._redetect_sweep_settle_time:.0f}s before any sweep '
+                        f'({self.redetect_samples} fresh samples needed)'
+                    )
             elif elapsed > self.nav_timeout:
                 self._fail(
                     f"Navigation timed out after {self.nav_timeout:.0f}s. "
