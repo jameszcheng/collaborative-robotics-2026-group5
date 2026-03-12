@@ -537,6 +537,9 @@ class NavigateToObject(Node):
     # ------------------------------------------------------------------
     def _compute_object_goal(self):
         """Step 2: Average pose samples, transform to origin frame, compute standoff + lateral offset."""
+        if not self.origin_set:
+            self.get_logger().warning('_compute_object_goal called before origin is set — skipping.')
+            return
         xs = [p[0] for p in self._pose_buffer]
         ys = [p[1] for p in self._pose_buffer]
         obj_x_odom = float(np.mean(xs))

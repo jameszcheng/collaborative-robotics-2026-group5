@@ -101,6 +101,7 @@ class CoordinatorNode(Node):
         self._redetect_hold_start = 0.0
         self._redetect_detected_hold_start = 0.0  # time first sample arrived at current position
         self._redetect_min_pose_stamp_sec = 0.0
+        self._search_min_pose_stamp_sec = 0.0
 
         # --- Publishers ---
         self.target_label_pub = self.create_publisher(String, '/perception/target_label', 10)
@@ -156,6 +157,8 @@ class CoordinatorNode(Node):
     def _obj_pose_cb(self, msg: PoseStamped):
         pose_stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
         if self.state == State.REDETECTING and pose_stamp_sec < self._redetect_min_pose_stamp_sec:
+            return
+        if self.state == State.SEARCHING and pose_stamp_sec < self._search_min_pose_stamp_sec:
             return
 
         self.object_pose = msg
@@ -214,6 +217,8 @@ class CoordinatorNode(Node):
         self._redetect_hold_start = 0.0
         self._redetect_detected_hold_start = 0.0
         self._redetect_min_pose_stamp_sec = 0.0
+        # Record the current time so SEARCHING ignores poses that arrived before pipeline start
+        self._search_min_pose_stamp_sec = self.get_clock().now().nanoseconds * 1e-9
 
         self._set_state(State.SEARCHING)
         self.get_logger().info(f"Setting target label to '{label}'")

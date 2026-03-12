@@ -432,7 +432,9 @@ def main(args=None):
                 if node._pickup_triggered:
                     node._pickup_triggered = False
                     node.state = PickupState.R_APPROACH  # reset state machine
-                    _run_pickup_once(node)
+                    rc = _run_pickup_once(node)
+                    if rc != 0:
+                        node.get_logger().error(f'Pickup failed with code {rc}')
             return 0
         else:
             return _run_pickup_once(node)
