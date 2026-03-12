@@ -26,6 +26,7 @@ Usage:
 
 import os
 import time
+import traceback
 from typing import List, Optional, Tuple
 
 import cv2
@@ -142,6 +143,9 @@ class ObjectDetectorNode(Node):
         self.last_log_time = 0.0
         self.last_pose_warn_time = 0.0
         self._last_no_detect_log_time = 0.0
+        self._frame_count = 0
+        self._last_heartbeat_time = 0.0
+        self._processing = False
 
         self.latest_depth = None
         self.depth_encoding = ""
@@ -157,7 +161,7 @@ class ObjectDetectorNode(Node):
         self.model_names = {}
         self._init_model()
 
-        qos_best_effort = QoSProfile(depth=5, reliability=ReliabilityPolicy.BEST_EFFORT)
+        qos_best_effort = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         qos_reliable = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(Image, self.rgb_topic, self.rgb_cb, qos_best_effort)
 
@@ -332,6 +336,33 @@ class ObjectDetectorNode(Node):
         return (x_w, y_w, z_w)
 
     def rgb_cb(self, msg: Image):
+        self._frame_count += 1
+
+        # Heartbeat: log every 0.5 seconds so we know the node is alive
+        now = time.time()
+        if now - self._last_heartbeat_time > 0.5:
+            self._last_heartbeat_time = now
+            self.get_logger().info(
+                f"[heartbeat] frames={self._frame_count}, target='{self.target_label}', "
+                f"depth={'yes' if self.latest_depth is not None else 'no'}, "
+                f"intrinsics={'yes' if self.fx is not None else 'no'}, "
+                f"processing={self._processing}"
+            )
+
+        # Skip frame if previous inference is still running (prevents backlog)
+        if self._processing:
+            return
+
+        self._processing = True
+        try:
+            self._rgb_cb_inner(msg)
+        except Exception as exc:
+            self.get_logger().error(f"Exception in rgb_cb (frame {self._frame_count}): {exc}")
+            traceback.print_exc()
+        finally:
+            self._processing = False
+
+    def _rgb_cb_inner(self, msg: Image):
         if self.model is None:
             self.publish_found(False)
             self.publish_label("")
@@ -492,8 +523,10 @@ class ObjectDetectorNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = ObjectDetectorNode()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

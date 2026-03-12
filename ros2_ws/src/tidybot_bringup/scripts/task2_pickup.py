@@ -118,20 +118,28 @@ class PickupNode(Node):
             self._latest_positions[name] = pos
 
     def _object_found_cb(self, msg: Bool):
-        """Callback for /perception/object_found."""
-        self.object_found = msg.data
+        """Callback for /perception/object_found.
+
+        Latches on True — only explicit resets (trigger cb / settle loop)
+        clear it back to False.  This prevents a single no-detection frame
+        from overwriting a valid detection before the pickup node reads it.
+        """
+        if msg.data:
+            self.object_found = True
 
     def _object_pose_cb(self, msg: PoseStamped):
-        """Callback for /perception/object_pose."""
+        """Callback for /perception/object_pose (only published on detection)."""
         self.object_pose = msg
 
     def _object_confidence_cb(self, msg: Float32):
-        """Callback for /perception/object_confidence."""
-        self.object_confidence = msg.data
+        """Callback for /perception/object_confidence. Latches on positive values."""
+        if msg.data > 0.0:
+            self.object_confidence = msg.data
 
     def _object_label_cb(self, msg: String):
-        """Callback for /perception/object_label."""
-        self.object_label = msg.data
+        """Callback for /perception/object_label. Latches on non-empty values."""
+        if msg.data:
+            self.object_label = msg.data
 
     def _pickup_trigger_cb(self, msg: Empty):
         """Coordinator triggers pickup — clear stale perception and start fresh."""
@@ -399,15 +407,15 @@ class PickupNode(Node):
         approach_pose = self.create_pose(x, y, z + self.APPROACH_HEIGHT, qw, qx, qy, qz)
         grasp_pose = self.create_pose(x, y, z + self.GRASP_HEIGHT, qw, qx, qy, qz)
         lift_pose = self.create_pose(x, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
-        # Move right 25cm (negative x in base_link) then drop
-        drop_pose = self.create_pose(x - 0.25, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
+        # Move right 40cm (negative x in base_link) then drop
+        drop_pose = self.create_pose(x - 0.40, y, z + self.LIFT_HEIGHT, qw, qx, qy, qz)
 
         self.get_logger().info('')
         self.get_logger().info('Pickup waypoints:')
         self.get_logger().info(f'  approach: ({x:.3f}, {y:.3f}, {z + self.APPROACH_HEIGHT:.3f})')
         self.get_logger().info(f'  descend:  ({x:.3f}, {y:.3f}, {z + self.GRASP_HEIGHT:.3f})')
         self.get_logger().info(f'  lift:     ({x:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
-        self.get_logger().info(f'  drop:     ({x - 0.25:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
+        self.get_logger().info(f'  drop:     ({x - 0.40:.3f}, {y:.3f}, {z + self.LIFT_HEIGHT:.3f})')
         if self.auto_start or self._pickup_triggered:
             self.get_logger().info('Auto-starting pickup sequence (coordinator mode)')
         else:

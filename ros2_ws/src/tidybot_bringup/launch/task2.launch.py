@@ -25,7 +25,7 @@ Usage:
 """
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, LogInfo
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -57,6 +57,7 @@ def generate_launch_description():
             'min_confidence', default_value='0.4',
             description='Minimum detection confidence'
         ),
+        LogInfo(msg='=== Task 2 Pipeline: Launching detection, navigation, pickup, coordinator ==='),
 
         # 1. Object detection
         Node(
@@ -64,8 +65,11 @@ def generate_launch_description():
             executable='detect_object_real.py',
             name='detect_object_real',
             output='screen',
+            emulate_tty=True,
             parameters=[{
                 'target_label': LaunchConfiguration('target_label'),
+                'publish_debug_image': True,
+                'save_debug_image': True,
             }],
         ),
 
@@ -75,6 +79,7 @@ def generate_launch_description():
             executable='navigate_to_object.py',
             name='navigate_to_object',
             output='screen',
+            emulate_tty=True,
             parameters=[{
                 'robot': 'real',
                 'mode': 'object',
@@ -95,6 +100,7 @@ def generate_launch_description():
             executable='task2_pickup.py',
             name='pickup',
             output='screen',
+            emulate_tty=True,
             parameters=[{
                 'auto_start': True,
             }],
@@ -106,6 +112,7 @@ def generate_launch_description():
             executable='task2_coordinator.py',
             name='coordinator',
             output='screen',
+            emulate_tty=True,
             parameters=[{
                 'detect_timeout': LaunchConfiguration('detect_timeout'),
                 'nav_timeout': LaunchConfiguration('nav_timeout'),

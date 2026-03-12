@@ -249,14 +249,7 @@ class CoordinatorNode(Node):
 
         elif self.state == State.PAUSE:
             if elapsed > self.pause_duration:
-                # Wipe ALL stale perception data right before transitioning
-                self.object_pose = None
-                self.object_confidence = 0.0
-                self._search_poses = []
-                self.get_logger().info(
-                    'Pause complete — cleared stale perception data. '
-                    'Triggering pickup sequence...'
-                )
+                self.get_logger().info('Pause complete. Triggering pickup sequence...')
                 self._set_state(State.PICKING_UP)
                 self._pickup_complete = None
                 self.pickup_trigger_pub.publish(Empty())
