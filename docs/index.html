@@ -326,11 +326,11 @@
     </div>
     <div class="card">
       <div class="card-icon">🤖</div>
-      <h3>Task 3 — [Your Group Task]</h3>
+      <h3>Task 3 — Bimanual Pillow Retrieval</h3>
       <p>
-        <!-- FILL IN: Describe your approved group-chosen task here. -->
-        [Describe your team's approved group-chosen task — e.g., GraspAnything-6D
-        language-driven 6-DoF grasps, bimanual coordination, or other approved task.]
+        Robot detects a red pillow using an HSV-based color detector, navigates to it,
+        and performs a <strong>coordinated two-arm grasp</strong> to pick it up — demonstrating
+        bimanual manipulation for large or deformable objects a single arm cannot reliably handle.
       </p>
     </div>
   </div>
@@ -636,7 +636,7 @@
         <span class="icon">🎥</span>
         <span>Task 3: [Group Task] (Real Robot)</span>
       </div>
-      <p class="video-label">Task 3 — [Group-chosen task] on real hardware</p>
+      <p class="video-label">Task 3 — Bimanual pillow retrieval on real hardware</p>
     </div>
     <div>
       <div class="video-placeholder">
@@ -667,10 +667,10 @@
         </p>
       </div>
       <div class="card">
-        <h3>Task 3 — [Group Task]</h3>
+        <h3>Task 3 — Bimanual Pillow Retrieval</h3>
         <p style="font-size:0.875rem;">
-          <!-- FILL IN -->
-          [Describe your Task 3 results here.]
+          <!-- FILL IN: success rate once tested -->
+          [Describe Task 3 results here — e.g., "Successfully grasped pillow bimanually in X/Y trials."]
         </p>
       </div>
     </div>
@@ -754,10 +754,13 @@
 
     <div class="team-card">
       <div class="team-name">Mathijs Ammerlaan</div>
-      <div class="team-role"><!-- FILL IN role -->[Role]</div>
+      <div class="team-role">Task 3 — Perception · Navigation · Manipulation · Pipeline</div>
       <ul class="team-contrib">
-        <!-- FILL IN contributions -->
-        <li>[Describe contributions]</li>
+        <li>Designed and built an HSV-based red pillow detector (<code>detect_object_real_task3.py</code>) with improved 3D pose estimation and a hardcoded-pose toggle for reliable hardware runs</li>
+        <li>Developed an offline tester with auto-scan support for rapid iteration on pillow detection without the robot</li>
+        <li>Authored the Task 3 navigation node with robustness improvements and fixed standalone mode for immediate pose acceptance</li>
+        <li>Implemented bimanual pillow pickup (<code>pickup_task3.py</code>) with hardcoded grasp positions for consistent two-arm grasping</li>
+        <li>Extended the coordinator for Task 3 with a <code>skip_redetect</code> parameter and resolved 3 critical pipeline bugs before hardware testing</li>
       </ul>
     </div>
 
