@@ -691,14 +691,14 @@
 
     <div class="team-card">
       <div class="team-name">Esteban Rincon</div>
-      <div class="team-role">Coordinator Pipeline · Perception · Manipulation</div>
+      <div class="team-role">Coordinator Pipeline · Manipulation · Perception</div>
       <ul class="team-contrib">
-        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines</li>
-        <li>Built PAUSE-based settling strategy and confidence filtering</li>
-        <li>Camera pan-tilt sweep in task2_pickup for close-range re-detection</li>
-        <li>RETURNING state for Task 1 origin recovery</li>
-        <li>GraspAnything-6D integration (pickup_anything.py)</li>
-        <li>TASK1_README, TASK2_README &amp; pipeline documentation</li>
+        <li>Authored all manipulation code end-to-end, including the full Task 1 &amp; 2 pickup pipelines (approach, descend, grasp, lift, drop)</li>
+        <li>Bridged real-time vision detection with arm execution — object poses flow directly from YOLO into IK-based grasp targets</li>
+        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
+        <li>Built adaptive pan-tilt camera sweep in task2_pickup for robust close-range re-detection before grasping</li>
+        <li>Led end-to-end testing and debugging across perception, manipulation, and coordinator layers on real hardware</li>
+        <li>Built and maintained the project website</li>
       </ul>
     </div>
 
