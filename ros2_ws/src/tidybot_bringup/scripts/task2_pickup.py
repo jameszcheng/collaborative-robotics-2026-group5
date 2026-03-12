@@ -198,7 +198,7 @@ class PickupNode(Node):
         pose.orientation.z = qz
         return pose
 
-    def call_service_sync(self, request: PlanToTarget.Request, timeout_sec: float = 20.0):
+    def call_service_sync(self, request: PlanToTarget.Request, timeout_sec: float = 30.0):
         future = self.plan_client.call_async(request)
         rclpy.spin_until_future_complete(self, future, timeout_sec=timeout_sec)
 
@@ -223,7 +223,7 @@ class PickupNode(Node):
         pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
         self.get_logger().info(f'Planning+executing {self.arm_name} to {pos_str}')
 
-        result = self.call_service_sync(request)
+        result = self.call_service_sync(request, timeout_sec=duration + 20.0)
         if result is None:
             return False
 
