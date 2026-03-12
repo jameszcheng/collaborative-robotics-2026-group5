@@ -49,7 +49,6 @@ class CoordinatorNode(Node):
         self.declare_parameter('nav_timeout', 90.0)
         self.declare_parameter('pickup_timeout', 60.0)
         self.declare_parameter('min_confidence', 0.4)
-        self.declare_parameter('redetect_samples', 3)
         self.declare_parameter('search_samples', 3)
 
         self.detect_timeout = float(self.get_parameter('detect_timeout').value)
@@ -57,7 +56,6 @@ class CoordinatorNode(Node):
         self.nav_timeout = float(self.get_parameter('nav_timeout').value)
         self.pickup_timeout = float(self.get_parameter('pickup_timeout').value)
         self.min_confidence = float(self.get_parameter('min_confidence').value)
-        self.redetect_samples = int(self.get_parameter('redetect_samples').value)
         self.search_samples = int(self.get_parameter('search_samples').value)
 
         # State
@@ -96,10 +94,8 @@ class CoordinatorNode(Node):
         self._redetect_sweep_index = 0
         self._redetect_sweep_start = 0.0
         self._redetect_sweep_settle_time = 5.0   # seconds at each position with no detection before advancing
-        self._redetect_position_sample_timeout = 10.0  # seconds to collect all samples once first is seen
         self._redetect_sweep_active = False
         self._redetect_hold_start = 0.0
-        self._redetect_detected_hold_start = 0.0  # time first sample arrived at current position
         self._redetect_min_pose_stamp_sec = 0.0
 
         # --- Publishers ---
@@ -213,7 +209,6 @@ class CoordinatorNode(Node):
         self._search_poses = []
         self._redetect_sweep_active = False
         self._redetect_hold_start = 0.0
-        self._redetect_detected_hold_start = 0.0
         self._redetect_min_pose_stamp_sec = 0.0
 
         self._set_state(State.SEARCHING)
@@ -232,7 +227,6 @@ class CoordinatorNode(Node):
     def _advance_redetect_sweep(self):
         """Move camera to the next sweep position and reset sample collection."""
         self._redetect_poses = []
-        self._redetect_detected_hold_start = 0.0
         if self._redetect_sweep_index < len(self._redetect_sweep_positions) - 1:
             self._redetect_sweep_active = True
             self._redetect_sweep_index += 1
@@ -305,14 +299,13 @@ class CoordinatorNode(Node):
                 self._redetect_sweep_index = 0
                 self._redetect_sweep_start = time.time()
                 self._redetect_hold_start = time.time()
-                self._redetect_detected_hold_start = 0.0
                 self._redetect_min_pose_stamp_sec = (
                     float(self.get_clock().now().nanoseconds) * 1e-9
                 )
                 self.get_logger().info(
                     f'Re-detecting object at close range... holding current camera pose for '
                     f'{self._redetect_sweep_settle_time:.0f}s before any sweep '
-                    f'({self.redetect_samples} fresh samples needed)'
+                    f'(single fresh detection needed)'
                 )
             elif elapsed > self.nav_timeout:
                 self._fail(
@@ -329,59 +322,29 @@ class CoordinatorNode(Node):
                 pan, tilt, _ = self._redetect_sweep_positions[self._redetect_sweep_index]
                 self._send_pan_tilt(pan, tilt)
 
-            if n >= self.redetect_samples:
-                # Got enough samples — all from the same camera position. Average and proceed.
-                xs = [p.pose.position.x for p in self._redetect_poses[-self.redetect_samples:]]
-                ys = [p.pose.position.y for p in self._redetect_poses[-self.redetect_samples:]]
-                zs = [p.pose.position.z for p in self._redetect_poses[-self.redetect_samples:]]
-                avg_x = sum(xs) / len(xs)
-                avg_y = sum(ys) / len(ys)
-                avg_z = sum(zs) / len(zs)
-                for i in range(self.redetect_samples):
-                    self.get_logger().info(
-                        f'Re-detection sample {i+1}/{self.redetect_samples}: '
-                        f'({xs[i]:.3f}, {ys[i]:.3f}, {zs[i]:.3f})'
-                    )
+            if n >= 1:
+                # Got a detection — use the single pose directly and proceed.
+                pose = self._redetect_poses[-1]
+                px = pose.pose.position.x
+                py = pose.pose.position.y
+                pz = pose.pose.position.z
                 self.get_logger().info(
-                    f'Re-detection complete. Averaged pose: ({avg_x:.3f}, {avg_y:.3f}, {avg_z:.3f})'
+                    f'Re-detection complete. Pose: ({px:.3f}, {py:.3f}, {pz:.3f})'
                 )
                 self._redetect_sweep_active = False
-                # Publish refined averaged pose so task2_pickup.py uses it instead of raw perception
+                # Publish refined pose so task2_pickup.py uses it instead of raw perception
                 refined_pose = PoseStamped()
                 refined_pose.header.stamp = self.get_clock().now().to_msg()
                 refined_pose.header.frame_id = 'base_link'
-                refined_pose.pose.position.x = avg_x
-                refined_pose.pose.position.y = avg_y
-                refined_pose.pose.position.z = avg_z
+                refined_pose.pose.position.x = px
+                refined_pose.pose.position.y = py
+                refined_pose.pose.position.z = pz
                 refined_pose.pose.orientation.w = 1.0
                 self.refined_pose_pub.publish(refined_pose)
                 self._set_state(State.PICKING_UP)
                 self._pickup_complete = None
                 self.get_logger().info('Triggering pickup sequence...')
                 self.pickup_trigger_pub.publish(Empty())
-
-            elif n > 0:
-                # First sample arrived at this position — camera is frozen here.
-                # Record when the first sample was seen so we can enforce a per-position timeout.
-                if self._redetect_detected_hold_start == 0.0:
-                    self._redetect_sweep_active = False
-                    self._redetect_detected_hold_start = time.time()
-                    self.get_logger().info(
-                        f'Object detected at current camera position '
-                        f'({n}/{self.redetect_samples} samples). '
-                        f'Holding camera here for remaining samples.'
-                    )
-                # If we've waited too long for remaining samples at this position, give up and move on.
-                position_elapsed = time.time() - self._redetect_detected_hold_start
-                if position_elapsed > self._redetect_position_sample_timeout:
-                    self.get_logger().warn(
-                        f'Only got {n}/{self.redetect_samples} samples at this position '
-                        f'after {self._redetect_position_sample_timeout:.0f}s. '
-                        f'Discarding and moving camera.'
-                    )
-                    self._redetect_poses = []
-                    self._redetect_detected_hold_start = 0.0
-                    self._advance_redetect_sweep()
 
             else:
                 # No samples yet at this position.
