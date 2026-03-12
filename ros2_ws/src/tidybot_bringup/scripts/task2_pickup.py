@@ -46,8 +46,8 @@ class PickupNode(Node):
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.14
-    GRASP_HEIGHT = 0.04
+    APPROACH_HEIGHT = 0.1
+    GRASP_HEIGHT = 0.02
     LIFT_HEIGHT = 0.25
     Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
 
@@ -154,9 +154,27 @@ class PickupNode(Node):
                 and self.object_pose is not None
                 and self.object_confidence >= min_confidence)
 
-    def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
-        """Wait for a valid object detection with sufficient confidence."""
+    def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5,
+                                   settle_time: float = 2.0) -> bool:
+        """Wait for a valid object detection with sufficient confidence.
+
+        Args:
+            settle_time: Seconds to wait (discarding detections) so the camera
+                         tilt physically settles and TF propagates before we
+                         accept a pose.
+        """
         self.get_logger().info(f'Waiting for object detection (min confidence: {min_confidence:.2f})...')
+        if settle_time > 0.0:
+            self.get_logger().info(f'Letting camera settle for {settle_time:.1f}s before accepting detections...')
+            settle_end = time.time() + settle_time
+            while time.time() < settle_end:
+                # Drain and discard detections while camera/TF settles
+                self._drain_callbacks()
+                self.object_found = False
+                self.object_pose = None
+                self.object_confidence = 0.0
+                time.sleep(0.05)
+            self.get_logger().info('Camera settled — now accepting detections.')
         start = time.time()
         while (time.time() - start) < timeout:
             self._drain_callbacks()
@@ -173,54 +191,55 @@ class PickupNode(Node):
             time.sleep(0.05)
         return False
 
-    def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
-        """
-        Sweep the camera through several pan/tilt positions looking for an object.
-
-        Checks for detections continuously — during pan-tilt movement and while
-        waiting at each position. Returns True as soon as an object is detected.
-        """
-        search_positions = [
-            (0.0,  0.5,  'center tilt down 0.5'),
-            (-0.5, 0.5,  'pan left tilt 0.5'),
-            (0.5,  0.5,  'pan right tilt 0.5'),
-            (0.0,  0.7,  'center tilt down 0.7'),
-            (-0.5, 0.7,  'pan left tilt 0.7'),
-            (0.5,  0.7,  'pan right tilt 0.7'),
-        ]
-
-        self.get_logger().info('No object found — starting camera search sweep...')
-
-        for pan, tilt, description in search_positions:
-            self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
-
-            # Move camera while checking for detections
-            msg = Float64MultiArray()
-            msg.data = [pan, tilt]
-            for _ in range(20):  # ~1 second of movement
-                self.pan_tilt_pub.publish(msg)
-                if self._check_detection(min_confidence):
-                    self.get_logger().info(
-                        f'  Object found during move to {description}: "{self.object_label}" '
-                        f'(confidence {self.object_confidence:.2f})')
-                    return True
-                time.sleep(0.05)
-
-            # Wait at this position, checking continuously
-            start = time.time()
-            while (time.time() - start) < timeout_per_position:
-                self.pan_tilt_pub.publish(msg)
-                if self._check_detection(min_confidence):
-                    self.get_logger().info(
-                        f'  Object found at {description}: "{self.object_label}" '
-                        f'(confidence {self.object_confidence:.2f})')
-                    return True
-                time.sleep(0.05)
-
-        # Return camera to center
-        self.send_pan_tilt(0.0, 0.0, duration=1.0)
-        self.get_logger().warn('Camera search sweep complete — no object detected.')
-        return False
+    # Camera sweep disabled — coordinator PAUSE state now handles camera reset
+    # def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
+    #     """
+    #     Sweep the camera through several pan/tilt positions looking for an object.
+    #
+    #     Checks for detections continuously — during pan-tilt movement and while
+    #     waiting at each position. Returns True as soon as an object is detected.
+    #     """
+    #     search_positions = [
+    #         (0.0,  0.5,  'center tilt down 0.5'),
+    #         (-0.5, 0.5,  'pan left tilt 0.5'),
+    #         (0.5,  0.5,  'pan right tilt 0.5'),
+    #         (0.0,  0.7,  'center tilt down 0.7'),
+    #         (-0.5, 0.7,  'pan left tilt 0.7'),
+    #         (0.5,  0.7,  'pan right tilt 0.7'),
+    #     ]
+    #
+    #     self.get_logger().info('No object found — starting camera search sweep...')
+    #
+    #     for pan, tilt, description in search_positions:
+    #         self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
+    #
+    #         # Move camera while checking for detections
+    #         msg = Float64MultiArray()
+    #         msg.data = [pan, tilt]
+    #         for _ in range(20):  # ~1 second of movement
+    #             self.pan_tilt_pub.publish(msg)
+    #             if self._check_detection(min_confidence):
+    #                 self.get_logger().info(
+    #                     f'  Object found during move to {description}: "{self.object_label}" '
+    #                     f'(confidence {self.object_confidence:.2f})')
+    #                 return True
+    #             time.sleep(0.05)
+    #
+    #         # Wait at this position, checking continuously
+    #         start = time.time()
+    #         while (time.time() - start) < timeout_per_position:
+    #             self.pan_tilt_pub.publish(msg)
+    #             if self._check_detection(min_confidence):
+    #                 self.get_logger().info(
+    #                     f'  Object found at {description}: "{self.object_label}" '
+    #                     f'(confidence {self.object_confidence:.2f})')
+    #                 return True
+    #             time.sleep(0.05)
+    #
+    #     # Return camera to center
+    #     self.send_pan_tilt(0.0, 0.0, duration=1.0)
+    #     self.get_logger().warn('Camera search sweep complete — no object detected.')
+    #     return False
 
     def send_pan_tilt(self, pan: float, tilt: float, duration: float = 1.0):
         """Send pan-tilt command, publishing repeatedly for the given duration."""
@@ -433,12 +452,13 @@ def _run_pickup_once(node):
     """Run the pickup pipeline once: search for object, then execute state machine."""
     node.get_logger().info('Waiting for object detection...')
     if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
-        node.get_logger().warn('No object found in initial window — starting camera search sweep.')
-        if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
-            node.get_logger().error('No object detected after full camera sweep. Aborting.')
-            node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
-            node.pickup_complete_pub.publish(Bool(data=False))
-            return 1
+        # Camera sweep disabled — coordinator PAUSE state now handles camera reset
+        # node.get_logger().warn('No object found in initial window — starting camera search sweep.')
+        # if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
+        node.get_logger().error('No object detected. Aborting.')
+        node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
+        node.pickup_complete_pub.publish(Bool(data=False))
+        return 1
     node.get_logger().info('Object detection ready!')
 
     ok = node.run_state_machine()

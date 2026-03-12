@@ -6,7 +6,7 @@ Sequences: NLP/manual trigger -> perception -> navigation -> pickup
            (pickup node handles its own camera sweep + re-detection)
 
 State machine:
-    IDLE -> SEARCHING -> NAVIGATING -> PICKING_UP -> DONE -> IDLE
+    IDLE -> SEARCHING -> NAVIGATING -> PAUSE -> PICKING_UP -> DONE -> IDLE
     Any state -> FAILED -> IDLE (on timeout/error)
 
 Usage:
@@ -34,6 +34,7 @@ class State(Enum):
     IDLE = auto()
     SEARCHING = auto()
     NAVIGATING = auto()
+    PAUSE = auto()
     PICKING_UP = auto()
     DONE = auto()
     FAILED = auto()
@@ -49,12 +50,14 @@ class CoordinatorNode(Node):
         self.declare_parameter('pickup_timeout', 120.0)
         self.declare_parameter('min_confidence', 0.4)
         self.declare_parameter('search_samples', 3)
+        self.declare_parameter('pause_duration', 3.0)
 
         self.detect_timeout = float(self.get_parameter('detect_timeout').value)
         self.nav_timeout = float(self.get_parameter('nav_timeout').value)
         self.pickup_timeout = float(self.get_parameter('pickup_timeout').value)
         self.min_confidence = float(self.get_parameter('min_confidence').value)
         self.search_samples = int(self.get_parameter('search_samples').value)
+        self.pause_duration = float(self.get_parameter('pause_duration').value)
 
         # State
         self.state = State.IDLE
@@ -234,20 +237,29 @@ class CoordinatorNode(Node):
 
         elif self.state == State.NAVIGATING:
             if self._nav_complete:
-                self.get_logger().info('Navigation complete! Reached standoff position.')
-                # Tilt camera down to look at the object at close range
-                self._send_pan_tilt(0.0, 0.6)
-                # Go directly to pickup — the pickup node handles its own
-                # camera sweep and re-detection at close range.
-                self._set_state(State.PICKING_UP)
-                self._pickup_complete = None
-                self.get_logger().info('Triggering pickup sequence...')
-                self.pickup_trigger_pub.publish(Empty())
+                self.get_logger().info('Navigation complete! Entering PAUSE — tilting camera down.')
+                # Tilt camera down first; stale data will be wiped after pause
+                self._send_pan_tilt(0.0, 0.5)
+                self._set_state(State.PAUSE)
             elif elapsed > self.nav_timeout:
                 self._fail(
                     f"Navigation timed out after {self.nav_timeout:.0f}s. "
                     f"Is navigate_to_object.py running?"
                 )
+
+        elif self.state == State.PAUSE:
+            if elapsed > self.pause_duration:
+                # Wipe ALL stale perception data right before transitioning
+                self.object_pose = None
+                self.object_confidence = 0.0
+                self._search_poses = []
+                self.get_logger().info(
+                    'Pause complete — cleared stale perception data. '
+                    'Triggering pickup sequence...'
+                )
+                self._set_state(State.PICKING_UP)
+                self._pickup_complete = None
+                self.pickup_trigger_pub.publish(Empty())
 
         elif self.state == State.PICKING_UP:
             if self._pickup_complete is True:
