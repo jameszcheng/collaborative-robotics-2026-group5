@@ -49,18 +49,18 @@ The coordinator (`task2_coordinator.py`) orchestrates the full pipeline. It does
 ## State Machine
 
 ```
-IDLE → SEARCHING → NAVIGATING → REDETECTING → PICKING_UP → DONE → IDLE
-                                                    ↓
-Any state ──────────────────────────── FAILED ────> IDLE
+IDLE → SEARCHING → NAVIGATING → PAUSE → PICKING_UP → DONE → IDLE
+                                                ↓
+Any state ──────────────────────── FAILED ────> IDLE
 ```
 
 | State | What happens | Timeout |
 |-------|-------------|---------|
 | **IDLE** | Waits for a voice command or manual trigger on `/coordinator/start` | — |
 | **SEARCHING** | Publishes the target label to perception; collects 3 confident detections, averages their x/y, and sends the averaged pose as a nav goal | 30 s |
-| **NAVIGATING** | Waits for `nav_complete` from `navigate_to_object` (robot drives to standoff position in front of the object) | 90 s |
-| **REDETECTING** | Collects 3 close-range detections at the same camera position and averages x/y/z for a precise grasp pose; if the object is not immediately visible, runs a 6-position camera pan/tilt sweep | 30 s |
-| **PICKING_UP** | Publishes the refined averaged pose and triggers `task2_pickup`; waits for pickup complete signal | 60 s |
+| **NAVIGATING** | Waits for `nav_complete` from `navigate_to_object` (robot drives to standoff position in front of the object); on arrival tilts camera down to 0.5 rad | 90 s |
+| **PAUSE** | Short settling delay (default 3 s) after navigation; stale detection data clears during this window before pickup is triggered | — |
+| **PICKING_UP** | Publishes an `Empty` trigger to `task2_pickup` and waits for the pickup complete signal | 120 s |
 | **DONE** | Logs success, waits 2 s, returns to IDLE | — |
 | **FAILED** | Emergency stops the base, logs the error, returns to IDLE | — |
 
@@ -78,26 +78,16 @@ Any state ───────────────────────�
 ### NAVIGATING
 - `navigate_to_object.py` receives the nav goal and drives the robot to a standoff position ~0.4 m in front of the object
 - The robot also aligns its heading to face the object
-- When it arrives, it publishes `True` on `/coordinator/nav_complete`
+- When it arrives, the coordinator tilts the camera down (0.0 pan, 0.5 rad tilt) and transitions to PAUSE
+- The navigation node publishes `True` on `/coordinator/nav_complete`
 
-### REDETECTING
-- Clears previous detection data; waits for fresh detections from the new (closer) vantage point
-- Timestamps are checked to ensure only post-arrival detections are used
-- At each camera position: waits up to 5 s with no detection before sweeping to the next angle
-- Once 3 samples are collected at a single camera position, averages x/y/z
-- Publishes the refined pose on `/coordinator/object_pose` (used by pickup node)
-
-Camera sweep positions (if object not found immediately):
-1. Center, tilt 0.5 rad
-2. Center, tilt 0.3 rad
-3. Pan left −0.3, tilt 0.5
-4. Pan right +0.3, tilt 0.5
-5. Pan left −0.3, tilt 0.3
-6. Pan right +0.3, tilt 0.3
+### PAUSE
+- A short configurable delay (default 3 s) that lets the robot settle and stale perception data age out
+- No signals are sent during this state; the coordinator simply waits before triggering pickup
 
 ### PICKING_UP
 - Publishes an `Empty` message on `/coordinator/pickup_trigger`
-- `task2_pickup.py` receives the trigger and the refined pose, then runs:
+- `task2_pickup.py` receives the trigger and runs its own camera sweep + re-detection internally, then:
   1. **APPROACH** — open gripper, plan arm to approach height (17 cm above object)
   2. **DESCEND** — plan arm down to grasp height (6 cm above object)
   3. **GRASP** — close gripper with sustained force
@@ -181,8 +171,10 @@ ros2 launch tidybot_bringup task2.launch.py \
     standoff_dist:=0.35 \       # metres to stop from object (default 0.4)
     detect_timeout:=30.0 \      # seconds to find object (default 30)
     nav_timeout:=90.0 \         # seconds to navigate to object (default 90)
-    pickup_timeout:=60.0 \      # seconds to complete pickup+drop (default 60)
-    min_confidence:=0.4         # minimum YOLO detection confidence (default 0.4)
+    pickup_timeout:=120.0 \     # seconds to complete pickup+drop (default 120)
+    min_confidence:=0.4 \       # minimum YOLO detection confidence (default 0.4)
+    search_samples:=3 \         # confident detections to average before navigating (default 3)
+    pause_duration:=3.0         # settling delay after navigation before pickup (default 3)
 ```
 
 ---
@@ -207,8 +199,8 @@ ros2 launch tidybot_bringup task2.launch.py \
 |-------|------|--------|---------------|
 | `/nlp/response` | String (JSON) | NLP node | IDLE |
 | `/coordinator/start` | String | Manual trigger | IDLE |
-| `/perception/object_pose` | PoseStamped | Detection node | SEARCHING, REDETECTING |
-| `/perception/object_confidence` | Float32 | Detection node | SEARCHING, REDETECTING |
+| `/perception/object_pose` | PoseStamped | Detection node | SEARCHING |
+| `/perception/object_confidence` | Float32 | Detection node | SEARCHING |
 | `/coordinator/nav_complete` | Bool | Navigation node | NAVIGATING |
 | `/coordinator/pickup_complete` | Bool | Pickup node | PICKING_UP |
 
@@ -218,9 +210,8 @@ ros2 launch tidybot_bringup task2.launch.py \
 | `/perception/target_label` | String | Detection node | SEARCHING (start) |
 | `/coordinator/status` | String | Monitoring | All states |
 | `/coordinator/nav_goal` | PoseStamped | Navigation node | SEARCHING (end) |
-| `/coordinator/object_pose` | PoseStamped | Pickup node | REDETECTING (end) |
-| `/coordinator/pickup_trigger` | Empty | Pickup node | REDETECTING (end) |
-| `/camera/pan_tilt_cmd` | Float64MultiArray | Camera | REDETECTING (sweep) |
+| `/coordinator/pickup_trigger` | Empty | Pickup node | PAUSE (end) |
+| `/camera/pan_tilt_cmd` | Float64MultiArray | Camera | NAVIGATING (end) |
 | `/cmd_vel` | Twist (zero) | Base | FAILED (e-stop) |
 
 ---
@@ -231,7 +222,6 @@ ros2 launch tidybot_bringup task2.launch.py \
 |---------|-------------|-----|
 | "No object detected after 30s" | Detection node not running or camera can't see object | Check `detect_object_real.py` is running; move object into camera FOV |
 | "Navigation timed out after 90s" | Nav node stuck or odometry drift | Check `navigate_to_object.py` output; verify `/odom` is publishing |
-| "Re-detection timed out after 30s" | Object moved or not visible from standoff | Reduce `standoff_dist`; check camera tilt angle |
 | "Pickup failed" | Object out of arm reach or IK failure | Verify object is within arm workspace; check object pose values |
 | Object dropped in wrong place | Drop offset doesn't align with bowl | Reposition bowl to robot's right side, ~25 cm away |
 | Coordinator ignores voice trigger | Already in a non-IDLE state | Wait for current task to complete or restart Terminal 2 |
