@@ -141,6 +141,7 @@ class ObjectDetectorNode(Node):
         self.last_found_state = None
         self.last_log_time = 0.0
         self.last_pose_warn_time = 0.0
+        self._last_no_detect_log_time = 0.0
 
         self.latest_depth = None
         self.depth_encoding = ""
@@ -409,8 +410,10 @@ class ObjectDetectorNode(Node):
         conf_list: List[float] = boxes.conf.cpu().numpy().tolist()
         cls_list: List[float] = boxes.cls.cpu().numpy().tolist()
 
+        all_detections = []
         for xyxy, conf, cls_id in zip(xyxy_list, conf_list, cls_list):
             class_name = self.model_names.get(int(cls_id), str(int(cls_id)))
+            all_detections.append((class_name, float(conf)))
             if class_name != self.target_label:
                 continue
 
@@ -422,6 +425,21 @@ class ObjectDetectorNode(Node):
                 h = max(0, int(round(y2 - y1)))
                 best = (x, y, w, h, float(conf), class_name)
                 best_conf = conf
+
+        # Log when target not found but other objects are detected
+        if best is None:
+            now = time.time()
+            if now - self._last_no_detect_log_time > 2.0:
+                self._last_no_detect_log_time = now
+                if all_detections:
+                    det_str = ", ".join(f"{n}({c:.2f})" for n, c in all_detections)
+                    self.get_logger().info(
+                        f"No '{self.target_label}' found. Other detections: [{det_str}]"
+                    )
+                else:
+                    self.get_logger().info(
+                        f"No '{self.target_label}' found. No objects detected at all."
+                    )
 
         return best
 

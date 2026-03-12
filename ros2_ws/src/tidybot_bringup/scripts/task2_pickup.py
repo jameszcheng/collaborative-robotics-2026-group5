@@ -5,6 +5,8 @@ task2_pickup.py — Pick up an object on real hardware using a simple state mach
 State machine:
     approach -> descend -> grasp -> lift -> drop -> done
 
+Handles its own camera sweep and re-detection at close range before pickup.
+
 Standalone usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
     ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
@@ -44,10 +46,10 @@ class PickupNode(Node):
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
-    APPROACH_HEIGHT = 0.17
-    GRASP_HEIGHT = 0.05
+    APPROACH_HEIGHT = 0.14
+    GRASP_HEIGHT = 0.04
     LIFT_HEIGHT = 0.25
-    Y_OFFSET = -0.07  # forward offset, negative = further from robot (meters)
+    Y_OFFSET = -0.05  # forward offset, negative = further from robot (meters)
 
     # Fixed arm pose for this script
     ARM_NAME = 'right'
@@ -65,7 +67,6 @@ class PickupNode(Node):
         # Coordinator publishers/subscribers
         self.pickup_complete_pub = self.create_publisher(Bool, '/coordinator/pickup_complete', 10)
         self.create_subscription(Empty, '/coordinator/pickup_trigger', self._pickup_trigger_cb, 10)
-        self.create_subscription(PoseStamped, '/coordinator/object_pose', self._coordinator_pose_cb, 10)
 
         self.plan_client = self.create_client(PlanToTarget, '/plan_to_target')
 
@@ -84,6 +85,11 @@ class PickupNode(Node):
         self.create_subscription(PoseStamped, '/perception/object_pose', self._object_pose_cb, 10)
         self.create_subscription(Float32, '/perception/object_confidence', self._object_confidence_cb, 10)
         self.create_subscription(String, '/perception/object_label', self._object_label_cb, 10)
+
+        # Pan-tilt camera control
+        self.pan_tilt_pub = self.create_publisher(
+            Float64MultiArray, '/camera/pan_tilt_cmd', 10
+        )
 
         # Direct interbotix command topics
         self.arm_group_pub = self.create_publisher(
@@ -128,24 +134,25 @@ class PickupNode(Node):
         self.object_label = msg.data
 
     def _pickup_trigger_cb(self, msg: Empty):
-        """Coordinator triggers pickup — skip the input() prompt."""
-        self.get_logger().info('Pickup triggered by coordinator')
+        """Coordinator triggers pickup — clear stale perception and start fresh."""
+        self.get_logger().info('Pickup triggered by coordinator — clearing stale perception data')
+        self.object_found = False
+        self.object_pose = None
+        self.object_confidence = 0.0
+        self.object_label = ""
         self._pickup_triggered = True
-
-    def _coordinator_pose_cb(self, msg: PoseStamped):
-        """Refined averaged pose from coordinator — overrides raw perception in auto_start mode."""
-        if self.auto_start:
-            self.object_pose = msg
-            self.object_found = True
-            self.get_logger().info(
-                f'Using coordinator refined pose: '
-                f'({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}, {msg.pose.position.z:.3f})'
-            )
 
     def _drain_callbacks(self, count: int = 30):
         """Process multiple pending callbacks to avoid missing perception messages."""
         for _ in range(count):
             rclpy.spin_once(self, timeout_sec=0.005)
+
+    def _check_detection(self, min_confidence: float = 0.4) -> bool:
+        """Drain callbacks and return True if a valid detection is available."""
+        self._drain_callbacks()
+        return (self.object_found
+                and self.object_pose is not None
+                and self.object_confidence >= min_confidence)
 
     def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
         """Wait for a valid object detection with sufficient confidence."""
@@ -165,6 +172,63 @@ class PickupNode(Node):
                 return True
             time.sleep(0.05)
         return False
+
+    def search_for_object(self, timeout_per_position: float = 5.0, min_confidence: float = 0.4) -> bool:
+        """
+        Sweep the camera through several pan/tilt positions looking for an object.
+
+        Checks for detections continuously — during pan-tilt movement and while
+        waiting at each position. Returns True as soon as an object is detected.
+        """
+        search_positions = [
+            (0.0,  0.5,  'center tilt down 0.5'),
+            (-0.5, 0.5,  'pan left tilt 0.5'),
+            (0.5,  0.5,  'pan right tilt 0.5'),
+            (0.0,  0.7,  'center tilt down 0.7'),
+            (-0.5, 0.7,  'pan left tilt 0.7'),
+            (0.5,  0.7,  'pan right tilt 0.7'),
+        ]
+
+        self.get_logger().info('No object found — starting camera search sweep...')
+
+        for pan, tilt, description in search_positions:
+            self.get_logger().info(f'  Search position: {description} (pan={pan:.2f}, tilt={tilt:.2f})')
+
+            # Move camera while checking for detections
+            msg = Float64MultiArray()
+            msg.data = [pan, tilt]
+            for _ in range(20):  # ~1 second of movement
+                self.pan_tilt_pub.publish(msg)
+                if self._check_detection(min_confidence):
+                    self.get_logger().info(
+                        f'  Object found during move to {description}: "{self.object_label}" '
+                        f'(confidence {self.object_confidence:.2f})')
+                    return True
+                time.sleep(0.05)
+
+            # Wait at this position, checking continuously
+            start = time.time()
+            while (time.time() - start) < timeout_per_position:
+                self.pan_tilt_pub.publish(msg)
+                if self._check_detection(min_confidence):
+                    self.get_logger().info(
+                        f'  Object found at {description}: "{self.object_label}" '
+                        f'(confidence {self.object_confidence:.2f})')
+                    return True
+                time.sleep(0.05)
+
+        # Return camera to center
+        self.send_pan_tilt(0.0, 0.0, duration=1.0)
+        self.get_logger().warn('Camera search sweep complete — no object detected.')
+        return False
+
+    def send_pan_tilt(self, pan: float, tilt: float, duration: float = 1.0):
+        """Send pan-tilt command, publishing repeatedly for the given duration."""
+        msg = Float64MultiArray()
+        msg.data = [pan, tilt]
+        for _ in range(int(duration * 20)):
+            self.pan_tilt_pub.publish(msg)
+            rclpy.spin_once(self, timeout_sec=0.05)
 
     def wait_for_joint_states(self, timeout: float = 10.0) -> bool:
         start = time.time()
@@ -366,13 +430,15 @@ class PickupNode(Node):
 
 
 def _run_pickup_once(node):
-    """Run the pickup pipeline once: wait for detection, then execute state machine."""
+    """Run the pickup pipeline once: search for object, then execute state machine."""
     node.get_logger().info('Waiting for object detection...')
-    if not node.wait_for_object_detection(timeout=15.0, min_confidence=0.4):
-        node.get_logger().error('No object detected. Aborting.')
-        node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
-        node.pickup_complete_pub.publish(Bool(data=False))
-        return 1
+    if not node.wait_for_object_detection(timeout=10.0, min_confidence=0.4):
+        node.get_logger().warn('No object found in initial window — starting camera search sweep.')
+        if not node.search_for_object(timeout_per_position=5.0, min_confidence=0.4):
+            node.get_logger().error('No object detected after full camera sweep. Aborting.')
+            node.get_logger().error('Make sure detect_object_real.py is running and camera can see the object.')
+            node.pickup_complete_pub.publish(Bool(data=False))
+            return 1
     node.get_logger().info('Object detection ready!')
 
     ok = node.run_state_machine()

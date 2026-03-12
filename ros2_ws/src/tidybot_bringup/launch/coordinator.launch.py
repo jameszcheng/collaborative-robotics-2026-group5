@@ -111,8 +111,6 @@ def generate_launch_description():
                 'nav_timeout': LaunchConfiguration('nav_timeout'),
                 'pickup_timeout': LaunchConfiguration('pickup_timeout'),
                 'min_confidence': LaunchConfiguration('min_confidence'),
-                'redetect_timeout': 30.0,
-                'redetect_samples': 3,
             }],
         ),
     ])

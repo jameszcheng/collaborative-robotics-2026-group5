@@ -2,10 +2,11 @@
 """
 task2_coordinator.py — Orchestrates the full pick-and-place pipeline.
 
-Sequences: NLP/manual trigger -> perception -> navigation -> re-detection -> pickup
+Sequences: NLP/manual trigger -> perception -> navigation -> pickup
+           (pickup node handles its own camera sweep + re-detection)
 
 State machine:
-    IDLE -> SEARCHING -> NAVIGATING -> REDETECTING -> PICKING_UP -> DONE -> IDLE
+    IDLE -> SEARCHING -> NAVIGATING -> PICKING_UP -> DONE -> IDLE
     Any state -> FAILED -> IDLE (on timeout/error)
 
 Usage:
@@ -33,7 +34,6 @@ class State(Enum):
     IDLE = auto()
     SEARCHING = auto()
     NAVIGATING = auto()
-    REDETECTING = auto()
     PICKING_UP = auto()
     DONE = auto()
     FAILED = auto()
@@ -45,14 +45,12 @@ class CoordinatorNode(Node):
 
         # Parameters
         self.declare_parameter('detect_timeout', 30.0)
-        self.declare_parameter('redetect_timeout', 45.0)
         self.declare_parameter('nav_timeout', 90.0)
-        self.declare_parameter('pickup_timeout', 60.0)
+        self.declare_parameter('pickup_timeout', 120.0)
         self.declare_parameter('min_confidence', 0.4)
         self.declare_parameter('search_samples', 3)
 
         self.detect_timeout = float(self.get_parameter('detect_timeout').value)
-        self.redetect_timeout = float(self.get_parameter('redetect_timeout').value)
         self.nav_timeout = float(self.get_parameter('nav_timeout').value)
         self.pickup_timeout = float(self.get_parameter('pickup_timeout').value)
         self.min_confidence = float(self.get_parameter('min_confidence').value)
@@ -66,8 +64,6 @@ class CoordinatorNode(Node):
         # Perception data
         self.object_pose = None
         self.object_confidence = 0.0
-        self._object_pose_stamp_sec = 0.0
-        self._redetect_poses = []
         self._search_poses = []
 
         # Completion signals
@@ -82,31 +78,13 @@ class CoordinatorNode(Node):
         self.create_subscription(Bool, '/coordinator/nav_complete', self._nav_complete_cb, 10)
         self.create_subscription(Bool, '/coordinator/pickup_complete', self._pickup_complete_cb, 10)
 
-        # Camera sweep state for REDETECTING
-        self._redetect_sweep_positions = [
-            (0.0,  0.5,  'center tilt down 0.5'),
-            (0.0,  0.3,  'center tilt down 0.3'),
-            (-0.3, 0.5,  'pan left tilt 0.5'),
-            (0.3,  0.5,  'pan right tilt 0.5'),
-            (-0.3, 0.3,  'pan left tilt 0.3'),
-            (0.3,  0.3,  'pan right tilt 0.3'),
-        ]
-        self._redetect_sweep_index = 0
-        self._redetect_sweep_start = 0.0
-        self._redetect_sweep_settle_time = 5.0   # seconds at each position with no detection before advancing
-        self._redetect_sweep_active = False
-        self._redetect_hold_start = 0.0
-        self._redetect_pose_seq = 0        # monotonic counter for incoming poses
-        self._redetect_min_pose_seq = 0    # poses before this seq are stale
-
         # --- Publishers ---
         self.target_label_pub = self.create_publisher(String, '/perception/target_label', 10)
         self.status_pub = self.create_publisher(String, '/coordinator/status', 10)
         self.nav_goal_pub = self.create_publisher(PoseStamped, '/coordinator/nav_goal', 10)
         self.pickup_trigger_pub = self.create_publisher(Empty, '/coordinator/pickup_trigger', 10)
-        self.refined_pose_pub = self.create_publisher(PoseStamped, '/coordinator/object_pose', 10)
-        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.pan_tilt_pub = self.create_publisher(Float64MultiArray, '/camera/pan_tilt_cmd', 10)
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # 10 Hz timer
         self.create_timer(0.1, self._tick)
@@ -152,36 +130,10 @@ class CoordinatorNode(Node):
         self._start_pipeline(obj)
 
     def _obj_pose_cb(self, msg: PoseStamped):
-        pose_stamp_sec = float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9
-        self._redetect_pose_seq += 1
-
-        # In REDETECTING, only accept poses received after we entered the state.
-        # Use a monotonic counter instead of timestamp comparison, since the camera
-        # image timestamps may differ from the ROS clock on real hardware.
-        if self.state == State.REDETECTING and self._redetect_pose_seq < self._redetect_min_pose_seq:
-            self.get_logger().debug(
-                f'Skipping stale pose (seq {self._redetect_pose_seq}/{self._redetect_min_pose_seq})'
-            )
-            return
-
         self.object_pose = msg
-        self._object_pose_stamp_sec = pose_stamp_sec
         if self.state == State.SEARCHING:
             if self.object_confidence >= self.min_confidence:
                 self._search_poses.append(msg)
-        elif self.state == State.REDETECTING:
-            if self.object_confidence >= self.min_confidence:
-                self._redetect_poses.append(msg)
-                self.get_logger().info(
-                    f'Redetect pose accepted: ({msg.pose.position.x:.3f}, '
-                    f'{msg.pose.position.y:.3f}, {msg.pose.position.z:.3f}) '
-                    f'conf={self.object_confidence:.2f}'
-                )
-            else:
-                self.get_logger().info(
-                    f'Redetect pose rejected (low confidence={self.object_confidence:.2f} '
-                    f'< {self.min_confidence:.2f})'
-                )
 
     def _obj_conf_cb(self, msg: Float32):
         self.object_confidence = msg.data
@@ -207,29 +159,13 @@ class CoordinatorNode(Node):
         msg.data = f'{self.state.name}:{self.target_label}'
         self.status_pub.publish(msg)
 
-    def _has_valid_detection(self) -> bool:
-        return (
-            self.object_pose is not None
-            and self.object_confidence >= self.min_confidence
-            and (
-                self.state != State.REDETECTING
-                or self._redetect_pose_seq >= self._redetect_min_pose_seq
-            )
-        )
-
     def _start_pipeline(self, label: str):
         self.target_label = label
         self.object_pose = None
         self.object_confidence = 0.0
-        self._object_pose_stamp_sec = 0.0
         self._nav_complete = False
         self._pickup_complete = None
-        self._redetect_poses = []
         self._search_poses = []
-        self._redetect_sweep_active = False
-        self._redetect_hold_start = 0.0
-        self._redetect_pose_seq = 0
-        self._redetect_min_pose_seq = 0
 
         self._set_state(State.SEARCHING)
         self.get_logger().info(f"Setting target label to '{label}'")
@@ -243,19 +179,6 @@ class CoordinatorNode(Node):
         msg = Float64MultiArray()
         msg.data = [pan, tilt]
         self.pan_tilt_pub.publish(msg)
-
-    def _advance_redetect_sweep(self):
-        """Move camera to the next sweep position and reset sample collection."""
-        self._redetect_poses = []
-        if self._redetect_sweep_index < len(self._redetect_sweep_positions) - 1:
-            self._redetect_sweep_active = True
-            self._redetect_sweep_index += 1
-            self._redetect_sweep_start = time.time()
-            pan, tilt, desc = self._redetect_sweep_positions[self._redetect_sweep_index]
-            self._send_pan_tilt(pan, tilt)
-            self.get_logger().info(f'  Camera: {desc} (pan={pan:.2f}, tilt={tilt:.2f})')
-        else:
-            self.get_logger().warn('Exhausted all camera sweep positions. Waiting at last position.')
 
     def _fail(self, reason: str):
         self.get_logger().error(reason)
@@ -297,6 +220,8 @@ class CoordinatorNode(Node):
                 nav_goal.pose.position.y = avg_y
                 nav_goal.pose.position.z = samples[-1].pose.position.z
                 nav_goal.pose.orientation.w = 1.0
+                # Center camera to look straight ahead during navigation
+                self._send_pan_tilt(0.0, 0.0)
                 self._set_state(State.NAVIGATING)
                 self._nav_complete = False
                 self.nav_goal_pub.publish(nav_goal)
@@ -310,91 +235,18 @@ class CoordinatorNode(Node):
         elif self.state == State.NAVIGATING:
             if self._nav_complete:
                 self.get_logger().info('Navigation complete! Reached standoff position.')
-                self._set_state(State.REDETECTING)
-                self._redetect_poses = []
-                self.object_pose = None
-                self.object_confidence = 0.0
-                self._object_pose_stamp_sec = 0.0
-                self._redetect_sweep_active = False
-                self._redetect_sweep_index = 0
-                self._redetect_sweep_start = time.time()
-                self._redetect_hold_start = time.time()
-                # Mark current pose seq so we skip any stale poses from before navigation
-                self._redetect_min_pose_seq = self._redetect_pose_seq + 1
-                self.get_logger().info(
-                    f'Re-detecting object at close range... holding current camera pose for '
-                    f'{self._redetect_sweep_settle_time:.0f}s before any sweep '
-                    f'(single fresh detection needed)'
-                )
-            elif elapsed > self.nav_timeout:
-                self._fail(
-                    f"Navigation timed out after {self.nav_timeout:.0f}s. "
-                    f"Is navigate_to_object.py running?"
-                )
-
-        elif self.state == State.REDETECTING:
-            n = len(self._redetect_poses)
-
-            # Keep publishing pan-tilt to hold position during sweep
-            if (self._redetect_sweep_active
-                    and self._redetect_sweep_index < len(self._redetect_sweep_positions)):
-                pan, tilt, _ = self._redetect_sweep_positions[self._redetect_sweep_index]
-                self._send_pan_tilt(pan, tilt)
-
-            if n >= 1:
-                # Got a detection — use the single pose directly and proceed.
-                pose = self._redetect_poses[-1]
-                px = pose.pose.position.x
-                py = pose.pose.position.y
-                pz = pose.pose.position.z
-                self.get_logger().info(
-                    f'Re-detection complete. Pose: ({px:.3f}, {py:.3f}, {pz:.3f})'
-                )
-                self._redetect_sweep_active = False
-                # Publish refined pose so task2_pickup.py uses it instead of raw perception
-                refined_pose = PoseStamped()
-                refined_pose.header.stamp = self.get_clock().now().to_msg()
-                refined_pose.header.frame_id = 'base_link'
-                refined_pose.pose.position.x = px
-                refined_pose.pose.position.y = py
-                refined_pose.pose.position.z = pz
-                refined_pose.pose.orientation.w = 1.0
-                self.refined_pose_pub.publish(refined_pose)
+                # Tilt camera down to look at the object at close range
+                self._send_pan_tilt(0.0, 0.6)
+                # Go directly to pickup — the pickup node handles its own
+                # camera sweep and re-detection at close range.
                 self._set_state(State.PICKING_UP)
                 self._pickup_complete = None
                 self.get_logger().info('Triggering pickup sequence...')
                 self.pickup_trigger_pub.publish(Empty())
-
-            else:
-                # No samples yet at this position.
-                if self._redetect_sweep_active:
-                    # Sweeping — advance if no detection after settle_time at current position.
-                    sweep_elapsed = time.time() - self._redetect_sweep_start
-                    if (sweep_elapsed >= self._redetect_sweep_settle_time
-                            and self._redetect_sweep_index < len(self._redetect_sweep_positions) - 1):
-                        self._advance_redetect_sweep()
-                else:
-                    # Initial hold at current camera position — start sweep after settle_time.
-                    hold_elapsed = time.time() - self._redetect_hold_start
-                    if hold_elapsed >= self._redetect_sweep_settle_time:
-                        self._redetect_sweep_active = True
-                        self._redetect_sweep_index = 0
-                        self._redetect_sweep_start = time.time()
-                        pan, tilt, desc = self._redetect_sweep_positions[0]
-                        self._send_pan_tilt(pan, tilt)
-                        self.get_logger().info(
-                            'Object not detected at initial position. Starting camera sweep...'
-                        )
-                        self.get_logger().info(
-                            f'  Camera: {desc} (pan={pan:.2f}, tilt={tilt:.2f})'
-                        )
-
-            if elapsed > self.redetect_timeout:
-                self._redetect_sweep_active = False
-                self._send_pan_tilt(0.0, 0.0)
+            elif elapsed > self.nav_timeout:
                 self._fail(
-                    f"Re-detection timed out after {self.redetect_timeout:.0f}s. "
-                    f"Object may have moved. Is detect_object_real.py running?"
+                    f"Navigation timed out after {self.nav_timeout:.0f}s. "
+                    f"Is navigate_to_object.py running?"
                 )
 
         elif self.state == State.PICKING_UP:
