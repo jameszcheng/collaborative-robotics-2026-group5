@@ -59,6 +59,17 @@ class PickupNode(Node):
     APPROACH_HEIGHT   = 0.17   # approach z = grasp_z + 17 cm (clear approach)
     LIFT_HEIGHT       = 0.25   # lift z = detected_z + 25 cm after grasping
 
+    # Hardcoded grasp positions in base_link frame.
+    # Used instead of the detected pose — more reliable once the robot has
+    # navigated to its known standoff position in front of the pillow.
+    #   x = ±7 cm lateral spread (right arm +x, left arm -x)
+    #   y = 0.40 m forward from robot base
+    #   z = 0.15 m — final grasp height (top surface of pillow)
+    HARDCODED_GRASP_X_RIGHT =  0.07
+    HARDCODED_GRASP_X_LEFT  = -0.07
+    HARDCODED_GRASP_Y       =  0.40
+    HARDCODED_GRASP_Z       =  0.15
+
     def __init__(self):
         super().__init__('pickup_task3')
         self.state = PickupState.R_APPROACH
@@ -160,16 +171,22 @@ class PickupNode(Node):
             rclpy.spin_once(self, timeout_sec=0.005)
 
     def wait_for_object_detection(self, timeout: float = 30.0, min_confidence: float = 0.5) -> bool:
-        self.get_logger().info(f'Waiting for object detection (min confidence: {min_confidence:.2f})...')
+        """Wait until the pillow is visible in the camera frame.
+
+        Pose is intentionally NOT checked here — grasp positions are hardcoded.
+        We only confirm the pillow is in frame before starting the arm sequence.
+        """
+        self.get_logger().info(f'Waiting for pillow to be visible (min confidence: {min_confidence:.2f})...')
         start = time.time()
         while (time.time() - start) < timeout:
             self._drain_callbacks()
-            if self.object_found and self.object_pose is not None and self.object_confidence >= min_confidence:
+            if self.object_found and self.object_confidence >= min_confidence:
                 self.get_logger().info(
-                    f'Object detected: "{self.object_label}" conf={self.object_confidence:.2f} '
-                    f'pos=({self.object_pose.pose.position.x:.3f}, '
-                    f'{self.object_pose.pose.position.y:.3f}, '
-                    f'{self.object_pose.pose.position.z:.3f})'
+                    f'Pillow visible: conf={self.object_confidence:.2f} '
+                    f'— using hardcoded grasp positions '
+                    f'(x=±{self.HARDCODED_GRASP_X_RIGHT:.2f}, '
+                    f'y={self.HARDCODED_GRASP_Y:.2f}, '
+                    f'z={self.HARDCODED_GRASP_Z:.2f})'
                 )
                 return True
             time.sleep(0.05)
@@ -305,36 +322,31 @@ class PickupNode(Node):
     # ------------------------------------------------------------------
 
     def run_state_machine(self) -> bool:
-        """Execute bimanual pillow pickup sequence."""
-        cx = self.object_pose.pose.position.x
-        cy = self.object_pose.pose.position.y
-        cz = self.object_pose.pose.position.z
+        """Execute bimanual pillow pickup sequence using hardcoded grasp positions."""
+        # Hardcoded grasp positions — lateral spread in x, forward in y, height in z
+        rx = self.HARDCODED_GRASP_X_RIGHT   # +0.07
+        lx = self.HARDCODED_GRASP_X_LEFT    # -0.07
+        gy = self.HARDCODED_GRASP_Y         # 0.40 m forward
+        gz = self.HARDCODED_GRASP_Z         # 0.15 m height (grasp z)
+        az = gz + self.APPROACH_HEIGHT      # 0.32 m (clear approach from above)
+        lz = gz + (self.LIFT_HEIGHT - self.GRASP_Z_ABOVE)  # 0.30 m (lift after grasp)
 
         qw, qx, qy, qz = self.ORIENT_FINGERS_DOWN
 
-        # Right arm target: 7 cm to the right (y - offset), 10 cm above pillow
-        # Left  arm target: 7 cm to the left  (y + offset), 10 cm above pillow
-        ry = cy - self.PILLOW_HALF_WIDTH
-        ly = cy + self.PILLOW_HALF_WIDTH
-        gz = cz + self.GRASP_Z_ABOVE
-        az = gz + self.APPROACH_HEIGHT
-        lz = cz + self.LIFT_HEIGHT
-
-        r_approach = self.create_pose(cx, ry, az, qw, qx, qy, qz)
-        r_grasp    = self.create_pose(cx, ry, gz, qw, qx, qy, qz)
-        l_approach = self.create_pose(cx, ly, az, qw, qx, qy, qz)
-        l_grasp    = self.create_pose(cx, ly, gz, qw, qx, qy, qz)
-        r_lift     = self.create_pose(cx, ry, lz, qw, qx, qy, qz)
-        l_lift     = self.create_pose(cx, ly, lz, qw, qx, qy, qz)
+        r_approach = self.create_pose(rx, gy, az, qw, qx, qy, qz)
+        r_grasp    = self.create_pose(rx, gy, gz, qw, qx, qy, qz)
+        l_approach = self.create_pose(lx, gy, az, qw, qx, qy, qz)
+        l_grasp    = self.create_pose(lx, gy, gz, qw, qx, qy, qz)
+        r_lift     = self.create_pose(rx, gy, lz, qw, qx, qy, qz)
+        l_lift     = self.create_pose(lx, gy, lz, qw, qx, qy, qz)
 
         self.get_logger().info('')
-        self.get_logger().info('Bimanual pickup waypoints (base_link frame):')
-        self.get_logger().info(f'  pillow centre:     ({cx:.3f}, {cy:.3f}, {cz:.3f})')
-        self.get_logger().info(f'  right approach:    ({cx:.3f}, {ry:.3f}, {az:.3f})')
-        self.get_logger().info(f'  right grasp:       ({cx:.3f}, {ry:.3f}, {gz:.3f})')
-        self.get_logger().info(f'  left  approach:    ({cx:.3f}, {ly:.3f}, {az:.3f})')
-        self.get_logger().info(f'  left  grasp:       ({cx:.3f}, {ly:.3f}, {gz:.3f})')
-        self.get_logger().info(f'  lift  (both):      ({cx:.3f}, *,  {lz:.3f})')
+        self.get_logger().info('Bimanual pickup waypoints — HARDCODED (base_link frame):')
+        self.get_logger().info(f'  right approach:    ({rx:.3f}, {gy:.3f}, {az:.3f})')
+        self.get_logger().info(f'  right grasp:       ({rx:.3f}, {gy:.3f}, {gz:.3f})')
+        self.get_logger().info(f'  left  approach:    ({lx:.3f}, {gy:.3f}, {az:.3f})')
+        self.get_logger().info(f'  left  grasp:       ({lx:.3f}, {gy:.3f}, {gz:.3f})')
+        self.get_logger().info(f'  lift  (both):      (*, {gy:.3f}, {lz:.3f})')
 
         if self.auto_start or self._pickup_triggered:
             self.get_logger().info('Auto-starting pickup sequence (coordinator mode)')

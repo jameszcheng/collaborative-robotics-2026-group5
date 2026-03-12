@@ -159,7 +159,7 @@ class ObjectDetectorNode(Node):
         # and publishes a fixed pose in world_frame.  Useful for close-up pickup
         # where the depth camera is unreliable.
         # Defaults: pillow at (x=0.0, y=0.2, z=0.15) in base_link frame.
-        self.declare_parameter("use_hardcoded_pose", True)
+        self.declare_parameter("use_hardcoded_pose", False)
         self.declare_parameter("hardcoded_x", 0.0)   # m — centre left/right
         self.declare_parameter("hardcoded_y", 0.2)   # m — forward from base
         self.declare_parameter("hardcoded_z", 0.15)  # m — height above ground
