@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Group 5 — ME 326 Collaborative Robotics 2026</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      line-height: 1.7;
+    }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #21262d;
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    .nav-logo { font-weight: 700; font-size: 1rem; color: #f0f6fc; }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a { font-size: 0.875rem; color: #8b949e; }
+    .nav-links a:hover { color: #f0f6fc; text-decoration: none; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d2035 100%);
+      border-bottom: 1px solid #21262d;
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: #1f6feb22;
+      border: 1px solid #1f6feb66;
+      color: #58a6ff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.9rem;
+      border-radius: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      color: #f0f6fc;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+    .hero h1 span { color: #58a6ff; }
+    .hero p {
+      font-size: 1.15rem;
+      color: #8b949e;
+      max-width: 640px;
+      margin: 0 auto 2rem;
+    }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 0.4rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; text-decoration: none; }
+    .btn-primary { background: #1f6feb; color: #fff; }
+    .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+
+    /* ── Sections ── */
+    section { padding: 5rem 2rem; max-width: 1000px; margin: 0 auto; }
+    section + section { padding-top: 2rem; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #58a6ff;
+      margin-bottom: 0.6rem;
+    }
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 1.5rem;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #f0f6fc;
+      margin-bottom: 0.75rem;
+    }
+    p { color: #8b949e; margin-bottom: 1rem; }
+    .divider { border: none; border-top: 1px solid #21262d; margin: 0; }
+
+    /* ── Cards ── */
+    .card-grid { display: grid; gap: 1.25rem; }
+    .card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #388bfd66; }
+    .card-icon {
+      font-size: 1.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Pipeline / State Machine ── */
+    .pipeline {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 2rem;
+      margin: 1.5rem 0;
+    }
+    .states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: center;
+      margin: 1.5rem 0;
+    }
+    .state-box {
+      background: #0d2035;
+      border: 1px solid #1f6feb66;
+      border-radius: 0.4rem;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #58a6ff;
+      white-space: nowrap;
+    }
+    .state-box.failed {
+      background: #2d1115;
+      border-color: #f8514966;
+      color: #f85149;
+    }
+    .arrow { color: #30363d; font-size: 1.2rem; font-weight: 300; }
+    .state-desc {
+      background: #0d1117;
+      border-left: 3px solid #1f6feb;
+      padding: 0.75rem 1rem;
+      border-radius: 0 0.4rem 0.4rem 0;
+      margin-bottom: 0.75rem;
+    }
+    .state-desc strong { color: #58a6ff; }
+    .state-desc p { margin: 0; font-size: 0.9rem; color: #8b949e; }
+
+    /* ── Code block ── */
+    pre {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #c9d1d9;
+      margin: 1rem 0 1.5rem;
+    }
+    code { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; color: #79c0ff; }
+
+    /* ── Video placeholder ── */
+    .video-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .video-embed {
+      aspect-ratio: 16/9;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+    .video-embed iframe { width: 100%; height: 100%; border: none; }
+    .video-placeholder {
+      aspect-ratio: 16/9;
+      background: #161b22;
+      border: 2px dashed #30363d;
+      border-radius: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #484f58;
+      font-size: 0.9rem;
+      gap: 0.5rem;
+    }
+    .video-placeholder .icon { font-size: 2.5rem; }
+    .video-label { font-size: 0.8rem; color: #8b949e; margin-top: 0.5rem; text-align: center; }
+
+    /* ── Team ── */
+    .team-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .team-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+    }
+    .team-name { font-size: 1.05rem; font-weight: 700; color: #f0f6fc; margin-bottom: 0.25rem; }
+    .team-role { font-size: 0.8rem; color: #58a6ff; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem; }
+    .team-contrib { font-size: 0.875rem; color: #8b949e; }
+    .team-contrib li { margin-bottom: 0.3rem; list-style: disc; margin-left: 1.1rem; }
+
+    /* ── Node table ── */
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.875rem; }
+    th { background: #161b22; color: #8b949e; font-weight: 600; text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid #21262d; }
+    td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #21262d; color: #c9d1d9; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Footer ── */
+    footer {
+      background: #161b22;
+      border-top: 1px solid #21262d;
+      padding: 2.5rem 2rem;
+      text-align: center;
+      color: #484f58;
+      font-size: 0.875rem;
+    }
+    footer a { color: #8b949e; }
+
+    /* ── Highlight boxes ── */
+    .callout {
+      background: #0d2035;
+      border: 1px solid #1f6feb33;
+      border-left: 3px solid #1f6feb;
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: #8b949e;
+    }
+    .callout strong { color: #58a6ff; }
+
+    @media (max-width: 600px) {
+      .nav-links { display: none; }
+      .states { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ───────────────────────── NAV ───────────────────────── -->
+<nav>
+  <span class="nav-logo">ME 326 — Group 5</span>
+  <div class="nav-links">
+    <a href="#problem">Problem</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#results">Results</a>
+    <a href="#team">Team</a>
+    <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<!-- ───────────────────────── HERO ───────────────────────── -->
+<div class="hero">
+  <div class="hero-badge">ME 326 · Stanford University · Winter 2026</div>
+  <h1>Voice-Commanded <span>Mobile Pick-and-Place</span></h1>
+  <p>
+    Group 5 &mdash; Monday 6&ndash;7:30pm &nbsp;·&nbsp;
+    TidyBot2 with bimanual WX250s arms, RealSense depth camera,
+    and a Gemini-powered natural language interface.
+  </p>
+  <div class="hero-buttons">
+    <a class="btn btn-primary" href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">
+      ⬡ View on GitHub
+    </a>
+    <a class="btn btn-secondary" href="#results">
+      ▶ Watch Demos
+    </a>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── PROBLEM ───────────────────────── -->
+<section id="problem">
+  <div class="section-label">Overview</div>
+  <h2>Problem Statement</h2>
+  <p>
+    Household and laboratory environments contain objects that constantly need to be retrieved,
+    reorganized, or moved on demand. A robot that can understand <em>natural spoken commands</em>
+    and autonomously execute multi-step manipulation tasks—locating, navigating to, and grasping
+    objects—would be a meaningful real-world collaborator.
+  </p>
+  <p>
+    We built a fully integrated pipeline on the <strong>TidyBot2</strong> platform: a holonomic
+    mobile base with two 6-DOF WX250s arms, an Intel RealSense D435 depth camera on a pan-tilt
+    mount, and an onboard Intel NUC running ROS2 Humble.
+  </p>
+
+  <div class="card-grid card-grid-3" style="margin-top:2rem;">
+    <div class="card">
+      <div class="card-icon">🗣️</div>
+      <h3>Task 1 — Object Retrieval</h3>
+      <p>
+        User says <em>"retrieve the banana."</em> Robot interprets the command, scans
+        the scene with YOLO, navigates to the object, grasps it, and returns to start.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <h3>Task 2 — Sequential Pick-and-Place</h3>
+      <p>
+        User says <em>"find the apple and place it in the basket."</em> Robot performs
+        a full sequential task: detect, navigate, grasp, navigate to target, release.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <h3>Task 3 — [Your Group Task]</h3>
+      <p>
+        <!-- FILL IN: Describe your approved group-chosen task here. -->
+        [Describe your team's approved group-chosen task — e.g., GraspAnything-6D
+        language-driven 6-DoF grasps, bimanual coordination, or other approved task.]
+      </p>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:2rem;">
+    <strong>Core challenge:</strong> Bridging the gap between noisy real-time perception
+    (depth sensor uncertainty, YOLO false positives) and reliable robot action
+    (navigation accuracy, successful grasping) in an unstructured tabletop environment—
+    all triggered by a single natural language utterance.
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── ARCHITECTURE ───────────────────────── -->
+<section id="architecture">
+  <div class="section-label">Method</div>
+  <h2>System Architecture</h2>
+  <p>
+    The system is composed of four specialized ROS2 nodes orchestrated by a central coordinator.
+    Each node has a single responsibility; the coordinator sequences them via topics and state transitions.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Node</th><th>File</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>coordinator_node.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Central state machine — orchestrates all other nodes</td>
+      </tr>
+      <tr>
+        <td><code>detect_object_real.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>YOLOv8 + RealSense depth → 3D object pose in base_link</td>
+      </tr>
+      <tr>
+        <td><code>navigate_to_object.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Proportional controller → standoff position + yaw alignment</td>
+      </tr>
+      <tr>
+        <td><code>pickup.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Arm state machine using mink IK → approach → grasp → lift</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Data flow diagram -->
+  <div class="pipeline">
+    <h3 style="margin-bottom:1.25rem;">End-to-End Data Flow</h3>
+    <pre style="font-size:0.78rem;">
+  User Speech
+      │
+      ▼
+  Google Gemini (NLP)  ──→  {action: "retrieve", object: "banana"}
+      │
+      ▼
+  ┌─────────────────────────────────────────────┐
+  │           coordinator_node.py               │
+  │           (Central State Machine)           │
+  └───────┬────────────────────┬────────────────┘
+          │                    │
+          ▼                    ▼
+  detect_object_real.py    navigate_to_object.py
+  YOLOv8 on RGB frame      Proportional controller
+  Median depth patch        → standoff + yaw align
+  Back-project → base_link
+  /perception/object_pose  /coordinator/nav_complete
+          │                    │
+          └────────┬───────────┘
+                   ▼
+           coordinator aggregates
+           3 confident poses → averaged goal
+                   │
+                   ▼
+           REDETECTING (close-range)
+           3 poses, same camera angle
+                   │
+                   ▼
+              pickup.py
+              APPROACH → DESCEND → GRASP → LIFT → DROP
+              mink IK + PlanToTarget service
+                   │
+                   ▼
+           /coordinator/pickup_complete
+    </pre>
+  </div>
+
+  <!-- State Machine -->
+  <h3 style="margin-top:2rem;">Coordinator State Machine</h3>
+  <p>
+    The coordinator implements a 6-state finite state machine. Each state has a defined
+    timeout and a single entry/exit condition—keeping logic clean and debuggable.
+  </p>
+
+  <div class="pipeline">
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">REDETECTING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin-bottom:1.5rem;">
+      Any state can transition to FAILED on timeout, which resets to IDLE.
+    </div>
+
+    <div class="state-desc">
+      <strong>IDLE</strong>
+      <p>Waits for a voice command from the Gemini NLP node (<code>/nlp/response</code>) or a manual string trigger. Ignores new triggers until pipeline completes.</p>
+    </div>
+    <div class="state-desc">
+      <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
+      <p>Tells the YOLO detector what to look for. Collects <strong>3 confident detections</strong> (≥0.4 confidence), averages their x/y to form a stable navigation goal, and publishes it to the navigator. Single YOLO frames are noisy; averaging before committing to navigation prevents wrong-direction drives.</p>
+    </div>
+    <div class="state-desc">
+      <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 90s)</span>
+      <p>Waits for <code>/coordinator/nav_complete</code>. Upon arrival, resets all perception buffers and stamps a minimum timestamp—any pose detected while the robot was moving is discarded (TF accuracy degrades during motion).</p>
+    </div>
+    <div class="state-desc">
+      <strong>REDETECTING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
+      <p>At close range (~0.4m), collects 3 more detections—all from the <em>same camera pan/tilt angle</em>. If the camera moves, the buffer resets, preventing cross-angle averaging artifacts. If no object is found, sweeps across 6 pan/tilt positions. Close-range depth is far more accurate for arm planning than distant estimates.</p>
+    </div>
+    <div class="state-desc">
+      <strong>PICKING UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 60s)</span>
+      <p>Fires the pickup trigger and waits for the arm node to report success or failure.</p>
+    </div>
+    <div class="state-desc">
+      <strong>DONE / FAILED</strong>
+      <p>DONE waits 2s for settling, then returns to IDLE. FAILED sends an emergency stop and returns to IDLE immediately.</p>
+    </div>
+  </div>
+
+  <!-- Nodes detail -->
+  <h3 style="margin-top:2rem;">Node Details</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>🎯 Perception Node</h3>
+      <p style="font-size:0.875rem;">
+        Runs <strong>YOLOv8</strong> on every RGB frame. For each detection, samples a
+        21×21 depth patch around the bounding box center and takes the <strong>median</strong>
+        (robust to sensor noise). Back-projects pixel + depth into the camera optical frame,
+        then transforms to <code>base_link</code> via the TF tree.
+        Publishes pose and confidence per frame.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🧭 Navigation Node</h3>
+      <p style="font-size:0.875rem;">
+        Receives the coordinator's pre-averaged goal. Computes a <strong>standoff position</strong>
+        0.4m behind the object with a 0.15m lateral offset (right-arm centering). Uses a
+        proportional controller (50 Hz): drive to standoff, then rotate in place to align yaw
+        within 5°. Locks odometry origin at startup to avoid drift.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🦾 Arm / Pickup Node</h3>
+      <p style="font-size:0.875rem;">
+        Executes a 5-phase arm state machine using the <strong>mink IK</strong> library.
+        All waypoints use a top-down grasp orientation. A −0.07m Y offset compensates
+        for the systematic error between camera-reported position and gripper contact point.
+        Reports success/failure to coordinator.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🗣️ NLP Interface</h3>
+      <p style="font-size:0.875rem;">
+        Records audio, transcribes via SpeechRecognition, and passes the text to
+        <strong>Google Gemini</strong>. Returns structured JSON
+        <code>{action, object, target}</code>. The object label is published at runtime
+        to dynamically configure the YOLO detector—no code changes needed per object.
+      </p>
+    </div>
+  </div>
+
+  <!-- Camera sweep -->
+  <h3 style="margin-top:2rem;">Camera Sweep During Redetection</h3>
+  <p>
+    If the object is not immediately visible at the standoff position, the coordinator
+    systematically sweeps the pan-tilt camera across 6 positions before timing out:
+  </p>
+  <pre>
+  Position 1: pan= 0.0,  tilt=0.5  (center, looking down steeply)
+  Position 2: pan= 0.0,  tilt=0.3  (center, shallower)
+  Position 3: pan=-0.3,  tilt=0.5  (left)
+  Position 4: pan=+0.3,  tilt=0.5  (right)
+  Position 5: pan=-0.3,  tilt=0.3  (left, shallower)
+  Position 6: pan=+0.3,  tilt=0.3  (right, shallower)
+
+  The moment a confident detection arrives, the sweep freezes and waits for
+  the remaining samples at that exact angle (no cross-angle mixing).</pre>
+
+  <h3 style="margin-top:2rem;">Why Two Rounds of Pose Averaging?</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>Round 1 — SEARCHING (1–2m away)</h3>
+      <p style="font-size:0.875rem;">
+        Provides a stable navigation <em>direction</em>. Single-frame depth at distance
+        is noisy, so 3 averaged samples prevent wrong-direction navigation while
+        keeping the robot responsive.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Round 2 — REDETECTING (0.4m away)</h3>
+      <p style="font-size:0.875rem;">
+        Provides a precise arm <em>target</em>. Close range gives better depth accuracy.
+        A timestamp filter discards any stale poses captured while the robot was still
+        in motion (when TF accuracy is lowest).
+      </p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── RESULTS ───────────────────────── -->
+<section id="results">
+  <div class="section-label">Results</div>
+  <h2>Videos &amp; Demos</h2>
+  <p>
+    Below are demonstration videos from both simulation (MuJoCo) and the real hardware.
+    <!-- INSTRUCTION: Replace the video-placeholder divs below with:
+         <div class="video-embed"><iframe src="https://www.youtube.com/embed/YOUR_VIDEO_ID" allowfullscreen></iframe></div>
+         Upload your videos to YouTube and paste the video ID in. -->
+  </p>
+
+  <div class="video-grid">
+    <div>
+      <!-- REPLACE with: <div class="video-embed"><iframe src="https://www.youtube.com/embed/XXXX" allowfullscreen></iframe></div> -->
+      <div class="video-placeholder">
+        <span class="icon">🎥</span>
+        <span>Task 1: Object Retrieval (Real Robot)</span>
+      </div>
+      <p class="video-label">Task 1 — Voice-commanded object retrieval on real hardware</p>
+    </div>
+    <div>
+      <div class="video-placeholder">
+        <span class="icon">🎥</span>
+        <span>Task 2: Pick-and-Place (Real Robot)</span>
+      </div>
+      <p class="video-label">Task 2 — Sequential pick-and-place on real hardware</p>
+    </div>
+    <div>
+      <div class="video-placeholder">
+        <span class="icon">🎥</span>
+        <span>Task 3: [Group Task] (Real Robot)</span>
+      </div>
+      <p class="video-label">Task 3 — [Group-chosen task] on real hardware</p>
+    </div>
+    <div>
+      <div class="video-placeholder">
+        <span class="icon">🖥️</span>
+        <span>MuJoCo Simulation Demo</span>
+      </div>
+      <p class="video-label">Full pipeline in MuJoCo simulation</p>
+    </div>
+  </div>
+
+  <!-- Outcomes summary -->
+  <div style="margin-top:2.5rem;">
+    <h3>Outcomes</h3>
+    <div class="card-grid card-grid-3" style="margin-top:1rem;">
+      <div class="card">
+        <h3>Task 1 — Object Retrieval</h3>
+        <p style="font-size:0.875rem;">
+          <!-- FILL IN: success rate, objects tested, notes -->
+          [Describe results — e.g., "X/Y successful grasps across N objects tested.
+          Objects included banana, apple, bottle."]
+        </p>
+      </div>
+      <div class="card">
+        <h3>Task 2 — Pick-and-Place</h3>
+        <p style="font-size:0.875rem;">
+          <!-- FILL IN: success rate, objects/containers tested -->
+          [Describe results — e.g., "Successfully placed objects into basket in X/Y trials."]
+        </p>
+      </div>
+      <div class="card">
+        <h3>Task 3 — [Group Task]</h3>
+        <p style="font-size:0.875rem;">
+          <!-- FILL IN -->
+          [Describe your Task 3 results here.]
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── TEAM ───────────────────────── -->
+<section id="team">
+  <div class="section-label">The Team</div>
+  <h2>Team Contributions</h2>
+  <p>
+    Group 5 — Monday 6–7:30pm &nbsp;·&nbsp; TA: Giuse Pham
+  </p>
+
+  <div class="team-grid" style="margin-top:1.5rem;">
+
+    <div class="team-card">
+      <div class="team-name">Esteban Rincon</div>
+      <div class="team-role">Coordinator Pipeline · Perception · Manipulation</div>
+      <ul class="team-contrib">
+        <li>Designed &amp; implemented the 6-state coordinator state machine</li>
+        <li>Built confidence filtering &amp; timestamp-based pose rejection</li>
+        <li>Camera pan-tilt sweep during REDETECTING</li>
+        <li>GraspAnything-6D integration (pickup_anything.py)</li>
+        <li>PIPELINE_EXPLANATION.md &amp; COORDINATOR_README documentation</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">James Cheng</div>
+      <div class="team-role">Pipeline Architecture · Navigation · NLP</div>
+      <ul class="team-contrib">
+        <li>Architected coordinator pipeline node orchestration</li>
+        <li>Implemented navigate_to_object.py navigation infrastructure</li>
+        <li>Integrated Gemini NLP voice command system</li>
+        <li>Auto-reset navigation origin on coordinator startup</li>
+        <li>Coordinator launch file &amp; pipeline integration</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Yazhou Zhang</div>
+      <div class="team-role">Perception · NLP · Manipulation</div>
+      <ul class="team-contrib">
+        <li>Depth-to-world coordinate projection with CameraInfo + TF</li>
+        <li>NLP interface initial implementation</li>
+        <li>Real-hardware manipulation tuning (left arm, tolerances)</li>
+        <li>RealSense depth-color alignment &amp; topic fallback</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Marco Vizcarra</div>
+      <div class="team-role">Navigation · Base Motion</div>
+      <ul class="team-contrib">
+        <li>Developed foundational base navigation scripts (movement_1–4.py)</li>
+        <li>Implemented safe_movement.py for collision-aware motion</li>
+        <li>Navigation infrastructure used as base for navigate_to_object</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Ke Wang</div>
+      <div class="team-role"><!-- FILL IN role -->[Role]</div>
+      <ul class="team-contrib">
+        <!-- FILL IN contributions -->
+        <li>[Describe contributions]</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Becky Miller</div>
+      <div class="team-role"><!-- FILL IN role -->[Role]</div>
+      <ul class="team-contrib">
+        <!-- FILL IN contributions -->
+        <li>[Describe contributions]</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Mathijs</div>
+      <div class="team-role"><!-- FILL IN role -->[Role]</div>
+      <ul class="team-contrib">
+        <!-- FILL IN contributions -->
+        <li>[Describe contributions]</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── CODE ───────────────────────── -->
+<section>
+  <div class="section-label">Code</div>
+  <h2>Codebase</h2>
+  <p>All code is open-source and available on GitHub.</p>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>📁 Repository</h3>
+      <p style="font-size:0.875rem;">
+        <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">
+          github.com/jameszcheng/collaborative-robotics-2026-group5
+        </a>
+      </p>
+      <p style="font-size:0.875rem;">
+        ROS2 Humble workspace with MuJoCo simulation, full coordinator pipeline,
+        perception, navigation, and manipulation nodes.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🔑 Key Files</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li><code>scripts/coordinator_node.py</code> — State machine</li>
+        <li><code>scripts/detect_object_real.py</code> — Perception</li>
+        <li><code>scripts/navigate_to_object.py</code> — Navigation</li>
+        <li><code>scripts/pickup.py</code> — Arm manipulation</li>
+        <li><code>launch/coordinator.launch.py</code> — Launch all nodes</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;">Quick Start</h3>
+  <pre>
+# Clone the repo
+git clone https://github.com/jameszcheng/collaborative-robotics-2026-group5.git
+cd collaborative-robotics-2026-group5
+
+# Build
+cd ros2_ws && source /opt/ros/humble/setup.bash && colcon build
+
+# Run the full coordinator pipeline on real hardware
+source setup_env.bash
+ros2 launch tidybot_bringup coordinator.launch.py target_label:=banana</pre>
+
+  <h3 style="margin-top:1.5rem;">System Requirements</h3>
+  <div class="card-grid card-grid-3" style="margin-top:1rem;">
+    <div class="card">
+      <h3>Software</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>Ubuntu 22.04</li>
+        <li>ROS2 Humble</li>
+        <li>Python 3.10+ (uv)</li>
+        <li>YOLOv8, mink, mujoco</li>
+        <li>google-genai (Gemini)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Hardware</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>TidyBot2 holonomic base</li>
+        <li>2× WX250s 6-DOF arms</li>
+        <li>Intel RealSense D435</li>
+        <li>Pan-tilt camera mount</li>
+        <li>Intel NUC onboard PC</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Robot Specs</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>Base: 3 DOF (x, y, θ)</li>
+        <li>Arms: 6 DOF each</li>
+        <li>Reach: 650mm, 250g payload</li>
+        <li>Camera: RGB + Depth aligned</li>
+        <li>Comm: Dynamixel + CAN</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── FOOTER ───────────────────────── -->
+<footer>
+  <p>
+    ME 326: Collaborative Robotics &nbsp;·&nbsp; Stanford University &nbsp;·&nbsp; Winter 2026
+  </p>
+  <p style="margin-top:0.5rem;">
+    Group 5 &nbsp;·&nbsp; TA: Giuse Pham &nbsp;·&nbsp;
+    <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://arm.stanford.edu/courses/collaborative-robotics/" target="_blank">Course Page</a>
+  </p>
+</footer>
+
+</body>
+</html>
