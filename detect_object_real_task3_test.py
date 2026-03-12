@@ -175,12 +175,28 @@ def print_topic_outputs(path: str, detection: Optional[Tuple]):
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python detect_object_real_task3_test.py image1.jpg [image2.jpg ...]")
-        sys.exit(1)
+IMAGE_FOLDER = Path(__file__).parent / "pillow_test_images"
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
-    image_paths = sys.argv[1:]
+
+def main():
+    # If no args given, scan the pillow_test_images folder automatically
+    if len(sys.argv) < 2:
+        if not IMAGE_FOLDER.exists():
+            print(f"Image folder not found: {IMAGE_FOLDER}")
+            sys.exit(1)
+        image_paths = sorted(
+            str(p) for p in IMAGE_FOLDER.iterdir()
+            if p.suffix.lower() in IMAGE_EXTS and "_detected" not in p.stem
+        )
+        if not image_paths:
+            print(f"No images found in {IMAGE_FOLDER}")
+            print(f"Drop .jpg / .png files there and run again.")
+            sys.exit(0)
+        print(f"Found {len(image_paths)} image(s) in {IMAGE_FOLDER}\n")
+    else:
+        image_paths = sys.argv[1:]
+
     results = []
 
     for path in image_paths:
