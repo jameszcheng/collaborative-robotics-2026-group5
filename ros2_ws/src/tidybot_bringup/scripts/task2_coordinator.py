@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-coordinator_node.py — Orchestrates the full pick-and-place pipeline.
+task2_coordinator.py — Orchestrates the full pick-and-place pipeline.
 
 Sequences: NLP/manual trigger -> perception -> navigation -> re-detection -> pickup
 
@@ -10,7 +10,7 @@ State machine:
 
 Usage:
     # Launch all pipeline nodes together:
-    ros2 launch tidybot_bringup coordinator.launch.py
+    ros2 launch tidybot_bringup task2.launch.py
 
     # Manual trigger (no NLP needed):
     ros2 topic pub /coordinator/start std_msgs/String "data: banana" --once
