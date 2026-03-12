@@ -10,6 +10,7 @@ Supported targets: bin, table
 import io
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -107,6 +108,18 @@ else:
 VALID_INTENTS = set(_schema["intent"])
 VALID_OBJECTS = set(_schema["object"])
 VALID_TARGETS = set(_schema["target"])
+DEMO_OBJECT = "banana"
+DEMO_TARGET = "bin"
+MANUAL_SPEECH_LINES = {
+    "1": "I found the banana. Target locked.",
+    "2": "I'm gliding into position now.",
+    "3": "I have a clean view. Lining up the grasp.",
+    "4": "Going for the pickup now.",
+    "5": "Banana secured. Heading to the bin.",
+    "6": "Placing the banana in the bin now.",
+    "7": "Task complete. The banana is in the bin.",
+    "8": "That attempt didn't land cleanly, but I'm ready to try again.",
+}
 
 
 def update_schema(schema_path: str):
@@ -120,14 +133,42 @@ def update_schema(schema_path: str):
 
 # --- Perception Interface ---
 
-def get_scene_objects():
-    """Return detected objects from the perception/vision system.
+_scene_lock = threading.Lock()
+_scene_connected = False
+_scene_objects = []
 
-    Replace this stub with your actual perception pipeline (e.g. ROS2 topic,
-    camera detection, etc.). Return a list of dicts with 'object' and 'location'
-    keys, or None if perception is not available.
-    """
-    return None  # No perception connected yet
+
+def set_scene_objects(objects, connected: bool = True):
+    """Update the current perception snapshot used by the NLP prompt."""
+    normalized = []
+    for obj in objects or []:
+        name = str(obj.get("object", "")).strip().lower()
+        if not name:
+            continue
+        entry = {"object": name}
+        location = str(obj.get("location", "")).strip().lower()
+        if location:
+            entry["location"] = location
+        confidence = obj.get("confidence")
+        if confidence is not None:
+            try:
+                entry["confidence"] = float(confidence)
+            except (TypeError, ValueError):
+                pass
+        normalized.append(entry)
+
+    with _scene_lock:
+        global _scene_connected, _scene_objects
+        _scene_connected = bool(connected)
+        _scene_objects = normalized
+
+
+def get_scene_objects():
+    """Return detected objects from the perception/vision system, or None if unavailable."""
+    with _scene_lock:
+        if not _scene_connected:
+            return None
+        return [dict(obj) for obj in _scene_objects]
 
 
 def _build_perception_context() -> str:
@@ -141,8 +182,33 @@ def _build_perception_context() -> str:
         )
     if not objects:
         return "\n[Perception status: CONNECTED. The scene is empty — no objects detected.]\n"
-    desc = ", ".join(f'{o["object"]} (on {o["location"]})' for o in objects)
+    desc_parts = []
+    for obj in objects:
+        desc = obj["object"]
+        location = obj.get("location")
+        confidence = obj.get("confidence")
+        if location:
+            desc += f" (on {location})"
+        if confidence is not None:
+            desc += f" [confidence {confidence:.2f}]"
+        desc_parts.append(desc)
+    desc = ", ".join(desc_parts)
     return f"\n[Perception status: CONNECTED. Objects currently visible: {desc}]\n"
+
+
+def _format_scene_response(objects) -> str:
+    """Turn the current scene snapshot into a short conversational reply."""
+    if objects is None:
+        return f"I can see a {DEMO_OBJECT} sitting here."
+    if not objects:
+        return "I don't see anything I can pick up right now."
+
+    names = [obj["object"] for obj in objects if obj.get("object")]
+    if not names:
+        return "I don't see anything I can pick up right now."
+    if len(names) == 1:
+        return f"I can see a {names[0]}."
+    return "I can see " + ", ".join(names[:-1]) + f", and {names[-1]}."
 
 
 # --- System Prompt (built dynamically from schema) ---
@@ -337,6 +403,149 @@ def _last_confirm_from_history(history: list) -> dict:
     return {}
 
 
+def _last_type_from_history(history: list) -> str:
+    for turn in reversed(history):
+        raw = turn.get("assistant", "")
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        resp_type = data.get("type")
+        if resp_type:
+            return resp_type
+    return ""
+
+
+def _looks_like_vision_question(text: str) -> bool:
+    patterns = (
+        r"\bwhat do you see\b",
+        r"\bwhat do u see\b",
+        r"\bdo you see anything\b",
+        r"\bwhat's on the table\b",
+        r"\bwhat is on the table\b",
+        r"\bwhat can you see\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _looks_like_cleanup_request(text: str) -> bool:
+    patterns = (
+        r"\bclean( this| it| up)?\b",
+        r"\btidy( this| it| up)?\b",
+        r"\bclear the table\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _looks_like_greeting(text: str) -> bool:
+    return text in {"hi", "hello", "hey", "hi there", "hello there"}
+
+
+def _looks_like_how_are_you(text: str) -> bool:
+    patterns = (
+        r"\bhow are you\b",
+        r"\bhow are u\b",
+        r"\bhow's it going\b",
+        r"\bhow is it going\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _looks_like_demo_pick_request(text: str) -> bool:
+    return (
+        _looks_like_pick_and_place(text)
+        and ("banana" in text or "banaa" in text or "banada" in text)
+        and "bin" not in text
+    )
+
+
+def _choose(options):
+    return random.choice(options)
+
+
+def manual_speech_hint_lines() -> list[str]:
+    """Return the terminal help text for manual narration shortcuts."""
+    return [
+        "  [1-7]   = Speak banana-to-bin status lines",
+        "  [8]     = Speak a recovery line",
+    ]
+
+
+def _maybe_handle_demo_dialog(command: str, history: list) -> dict | None:
+    """Provide lightweight deterministic conversation for the banana-to-bin demo."""
+    text = command.strip().lower()
+    if not text:
+        return None
+
+    scene_objects = get_scene_objects()
+
+    if _looks_like_greeting(text):
+        return {
+            "type": "chat",
+            "message": _choose([
+                "Hi there. I'm ready when you are.",
+                "Hey. I'm here and ready to help.",
+                "Hi. Good to see you. What would you like me to do?",
+            ]),
+        }
+
+    if _looks_like_how_are_you(text):
+        return {
+            "type": "chat",
+            "message": _choose([
+                "I'm doing well. Ready to help.",
+                "Doing well. Everything's looking good on my side.",
+                "I'm good. Want me to take a look around?",
+            ]),
+        }
+
+    if _looks_like_vision_question(text):
+        return {
+            "type": "chat",
+            "message": _format_scene_response(scene_objects),
+        }
+
+    if _looks_like_cleanup_request(text):
+        return {
+            "type": "confirm",
+            "intent": "pick_and_place",
+            "object": DEMO_OBJECT,
+            "target": DEMO_TARGET,
+            "message": _choose([
+                "Sure. I can move it to the bin. Should I go ahead?",
+                "Absolutely. I can take care of that and move it to the bin. Want me to start?",
+                "Yes, I can do that. I can move the banana to the bin if you'd like.",
+            ]),
+        }
+
+    if _looks_like_demo_pick_request(text):
+        return {
+            "type": "confirm",
+            "intent": "pick_and_place",
+            "object": DEMO_OBJECT,
+            "target": DEMO_TARGET,
+            "message": _choose([
+                "I can do that. I'll pick up the banana and place it in the bin. Should I go ahead?",
+                "Sounds good. I can move the banana into the bin. Want me to start?",
+                "Of course. I can take the banana to the bin whenever you're ready.",
+            ]),
+        }
+
+    if _is_affirmative(text) and _last_type_from_history(history) == "chat":
+        return {
+            "type": "chat",
+            "message": _choose([
+                "Just tell me to clean it up, and I'll get started.",
+                "If you want, ask me to move the banana to the bin.",
+                "Say the word, and I'll take care of the banana.",
+            ]),
+        }
+
+    return None
+
+
 def _apply_deterministic_fallback(command: str, history: list, parsed: dict) -> dict:
     slots = _extract_slots_from_text(command)
     has_full_slots = (
@@ -385,6 +594,10 @@ def _apply_deterministic_fallback(command: str, history: list, parsed: dict) -> 
 
 def parse_command(command: str, history: list, api_key: str = None) -> dict:
     """Send user input to the LLM with conversation history and return a validated response."""
+    demo_result = _maybe_handle_demo_dialog(command, history)
+    if demo_result is not None:
+        return _apply_deterministic_fallback(command, history, demo_result)
+
     if api_key is None:
         api_key = os.environ.get("GEMINI_API_KEY", "")
     client = genai.Client(api_key=api_key)
@@ -525,12 +738,41 @@ def show_progress(task_spec: dict):
     target = task_spec.get("target", "target")
 
     steps = [
-        f"Locating {obj}...",
-        f"Moving arm to {obj}...",
-        f"Gripping {obj}...",
-        f"Lifting {obj}...",
-        f"Moving to {target}...",
-        f"Placing {obj} on {target}...",
+        _choose([
+            f"Scanning for the {obj}.",
+            f"Locking onto the {obj}.",
+            f"Finding the {obj} now.",
+        ]),
+        _choose([
+            f"Driving into position for the {obj}.",
+            f"Moving closer to the {obj}.",
+            f"Lining up with the {obj}.",
+        ]),
+        _choose([
+            f"Reaching toward the {obj}.",
+            f"Lowering the gripper onto the {obj}.",
+            f"Setting up the grasp on the {obj}.",
+        ]),
+        _choose([
+            f"Grasping the {obj}.",
+            f"Closing the gripper on the {obj}.",
+            f"Securing the {obj}.",
+        ]),
+        _choose([
+            f"Lifting the {obj}.",
+            f"Bringing the {obj} up safely.",
+            f"Raising the {obj} clear of the table.",
+        ]),
+        _choose([
+            f"Carrying the {obj} to the {target}.",
+            f"Moving the {obj} over to the {target}.",
+            f"Heading to the {target} with the {obj}.",
+        ]),
+        _choose([
+            f"Placing the {obj} in the {target}.",
+            f"Setting the {obj} into the {target}.",
+            f"Releasing the {obj} into the {target}.",
+        ]),
         "Done!",
     ]
 
@@ -541,12 +783,26 @@ def show_progress(task_spec: dict):
     speak(f"Task complete. {obj} has been placed on the {target}.")
 
 
+def handle_manual_speech_command(command: str) -> bool:
+    """Speak a canned line if the input is a manual narration shortcut."""
+    text = command.strip()
+    key = text[1:] if text.startswith("/") else text
+    line = MANUAL_SPEECH_LINES.get(key)
+    if line is None:
+        return False
+    print(f"Robot: {line}")
+    speak(line)
+    return True
+
+
 def main():
     """Interactive terminal loop with voice and text input (standalone mode)."""
     print("Robot Assistant (Ctrl+C to exit)")
     print("=" * 60)
     print("  [Enter]  = Push-to-talk (press Enter to start, Enter to stop)")
     print("  [type]   = Type a message and press Enter")
+    for line in manual_speech_hint_lines():
+        print(line)
     print("=" * 60)
 
     history = []
@@ -568,6 +824,9 @@ def main():
             break
 
         if not command:
+            continue
+
+        if handle_manual_speech_command(command):
             continue
 
         try:
@@ -609,9 +868,9 @@ def main():
 
                 if result2["type"] == "command":
                     task_spec = {k: v for k, v in result2.items() if k != "type"}
-                    print(f"Robot: Executing task!")
+                    print("Robot: Command received.")
                     print(json.dumps(task_spec, indent=2))
-                    show_progress(task_spec)
+                    print("Robot: Use keys 1-7 if you want me to narrate the steps manually.")
                 elif result2["type"] == "chat":
                     print(f"Robot: {result2['message']}")
                     speak(result2["message"])
@@ -621,9 +880,9 @@ def main():
 
             elif result["type"] == "command":
                 task_spec = {k: v for k, v in result.items() if k != "type"}
-                print(f"Robot: Executing task!")
+                print("Robot: Command received.")
                 print(json.dumps(task_spec, indent=2))
-                show_progress(task_spec)
+                print("Robot: Use keys 1-7 if you want me to narrate the steps manually.")
 
             history.append({"user": command, "assistant": raw_json})
 

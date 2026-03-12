@@ -8,15 +8,72 @@ how each one works internally, what it publishes/subscribes to, and how they int
 ## Pipeline Overview
 
 ```
+nlp_interface_node.py     — voice/text interface, command parsing, spoken feedback
 detect_object_real.py     — vision: YOLO + depth → 3D pose in base_link
 navigate_to_object.py     — base navigation to standoff position
 pickup.py                 — arm IK planning and grasp execution
 coordinator_node.py       — state machine orchestrating the above three
 ```
 
-All four nodes launch together via `coordinator.launch.py`. The coordinator is the only
-one that "knows" the full sequence — the other three are reactive and just respond to
-the signals the coordinator sends them.
+The coordinator is the only node that "knows" the full physical sequence — the other
+nodes are reactive and respond to the signals the coordinator sends them. The NLP node
+acts as the operator-facing layer: it turns speech/text into structured commands, keeps
+the target label aligned with perception, and speaks progress updates back to the user.
+
+---
+
+## 0. nlp_interface_node.py
+
+**Role:** Provide the conversational front end for the pipeline. It accepts typed or
+spoken user input, parses it into a structured command, publishes that command to the
+robot pipeline, and relays perception/coordinator progress back as spoken feedback.
+
+### How it works
+
+**Command parsing:**
+1. Accepts text from the interactive terminal or the `/nlp/parse` service
+2. Uses the NLP parser to classify the input as `chat`, `confirm`, `command`, or `exit`
+3. Publishes the raw JSON response on `/nlp/response`
+4. If the final result is a real `command`, also publishes the requested object label to
+   `/perception/target_label`
+
+**Why `/nlp/response` matters:**
+The coordinator subscribes to `/nlp/response` and only starts the pipeline when it sees
+a JSON message with `type == "command"` and a valid object. This keeps normal
+conversation separate from robot execution.
+
+**Perception-aware conversation:**
+- The NLP layer keeps a lightweight snapshot of current perception state
+- If an object is currently detected, the NLP prompt can answer questions like
+  "what do you see?" in a grounded way
+- If perception is not currently publishing, the assistant still responds
+  conversationally and can guide the user toward a command
+
+**Progress narration:**
+The NLP node subscribes to coordinator/perception status topics and turns them into
+short spoken updates such as:
+- "Searching for the banana."
+- "I found the banana. Target locked."
+- "Going for the pickup now."
+- "Task complete. The banana is in the bin."
+
+**Manual speech fallback:**
+The interactive terminal also supports keyboard-triggered speech lines. This gives the
+operator a way to keep the interaction flowing even if the physical pipeline pauses or
+needs recovery.
+
+### Topics / Services
+
+| Direction | Topic/Service | Type |
+|-----------|--------------|------|
+| Pub | `/nlp/response` | String (JSON) |
+| Pub | `/perception/target_label` | String |
+| Sub | `/coordinator/status` | String |
+| Sub | `/perception/object_found` | Bool |
+| Sub | `/perception/object_confidence` | Float32 |
+| Sub | `/perception/object_label` | String |
+| Sub | `/coordinator/pickup_complete` | Bool |
+| Srv | `/nlp/parse` | NlpCommand |
 
 ---
 
@@ -382,12 +439,24 @@ immediately without restarting.
 
 ## End-to-End Data Flow
 
-Here is what happens to the object's 3D position as it flows through the pipeline:
+Here is what happens to the command, perception state, and object pose as they flow
+through the pipeline:
 
 ```
+User / nlp_interface_node.py
+  User says "pick up the banana"
+  NLP parses → {"type": "command", "object": "banana", ...}
+  Published to: /nlp/response
+  Also sets: /perception/target_label = "banana"
+        │
+        ▼
+coordinator_node.py (IDLE -> SEARCHING)
+  Accepts the command, sets target label, begins the state machine
+        │
+        ▼
 detect_object_real.py
   Per-frame YOLO + median depth → single noisy pose in base_link
-  Published to: /perception/object_pose, /perception/object_confidence
+  Published to: /perception/object_pose, /perception/object_confidence, /perception/object_label
         │
         ▼
 coordinator_node.py (SEARCHING)
@@ -417,6 +486,11 @@ pickup.py
         │
         ▼
 coordinator_node.py (PICKING_UP → DONE → IDLE)
+        │
+        ▼
+nlp_interface_node.py
+  Subscribes to coordinator/perception topics
+  Speaks status back to the operator as the task progresses
 ```
 
 ---
