@@ -68,8 +68,10 @@ ORIENTATIONS = {
 # Test positions in base_link frame (x, y, z)
 # -Y is forward, +X is left, +Z is up
 # Right arm shoulder ~(-0.15, -0.12, 0.45), left ~(0.15, -0.12, 0.45)
-RIGHT_TEST_POS = (-0.10, -0.35, 0.50)
-LEFT_TEST_POS = (0.10, -0.35, 0.50)
+# Spread arms wider (0.20m from center each) and keep above shoulder height
+# to avoid camera mast and inter-arm collisions
+RIGHT_TEST_POS = (-0.20, -0.30, 0.55)
+LEFT_TEST_POS = (0.20, -0.30, 0.55)
 
 SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
 
