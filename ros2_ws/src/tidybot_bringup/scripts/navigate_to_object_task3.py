@@ -11,20 +11,20 @@ TERMINAL 1 — Launch the robot
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 2 — Run object detection
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=pillow
+  ros2 run tidybot_bringup detect_object_real_task3.py --ros-args -p target_label:=pillow
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 3 — Navigate to detected object
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   # Reset origin (recommended before every test)
-  ros2 run tidybot_bringup navigate_to_object.py --ros-args -p mode:=reset_origin -p robot:=real
+  ros2 run tidybot_bringup navigate_to_object_task3.py --ros-args -p mode:=reset_origin -p robot:=real
 
   # Navigate to object (real robot, default 0.4m standoff)
-  ros2 run tidybot_bringup navigate_to_object.py --ros-args -p robot:=real
+  ros2 run tidybot_bringup navigate_to_object_task3.py --ros-args -p robot:=real
 
   # Custom standoff distance
-  ros2 run tidybot_bringup navigate_to_object.py --ros-args -p robot:=real -p standoff_dist:=0.3
+  ros2 run tidybot_bringup navigate_to_object_task3.py --ros-args -p robot:=real -p standoff_dist:=0.3
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 3 (alt) — Test with hardcoded position (no object detection needed)
@@ -143,8 +143,8 @@ class NavigateToObject(Node):
         self.declare_parameter('stable_required', 25)
 
         # --- NEW: object navigation parameters ---
-        self.declare_parameter('standoff_dist', 0.4)   # metres — stop this far from the object
-        self.declare_parameter('lateral_offset', 0.15)  # metres — positive = shift left (to line up right arm)
+        self.declare_parameter('standoff_dist', 0.3)   # metres — stop this far from the object
+        self.declare_parameter('lateral_offset', 0.0)  # metres — positive = shift left (to line up right arm)
         self.declare_parameter('pose_timeout', 30.0)    # seconds to wait for first object pose
         self.declare_parameter('face_object', True)     # align to face the object after reaching standoff
         self.declare_parameter('pose_samples', 5)       # average this many pose readings before locking goal
@@ -241,7 +241,7 @@ class NavigateToObject(Node):
         self._sim_goal_sent_time = None
 
         # --- Object pose state ---
-        self._nav_goal_received = False                # True once coordinator sends a nav_goal
+        self._nav_goal_received = True                 # standalone: accept poses immediately; coordinator resets via _nav_goal_callback
         self._pose_buffer = []                         # list of (x, y) from received poses
         self._object_pose_ready = False                # True once we have enough samples
         self._object_goal_set = False                  # True once we've computed standoff goal

@@ -48,7 +48,7 @@ class PickupState(Enum):
 class PickupNode(Node):
     """Bimanual pillow pickup — right arm grabs right end, left arm grabs left end, both lift."""
 
-    ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
+    ORIENT_FINGERS_DOWN = (0.707, 0.0, 0.707, 0.0)  # (qw, qx, qy, qz) — fingers down, rotated 90°
 
     # Sleep poses per arm
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]
@@ -57,7 +57,7 @@ class PickupNode(Node):
     PILLOW_HALF_WIDTH = 0.07   # ±7 cm in y (left/right) from pillow centre
     GRASP_Z_ABOVE     = 0.10   # grasp z = detected_z + 10 cm (grip top surface of pillow)
     APPROACH_HEIGHT   = 0.17   # approach z = grasp_z + 17 cm (clear approach)
-    LIFT_HEIGHT       = 0.25   # lift z = detected_z + 25 cm after grasping
+    LIFT_HEIGHT       = 0.27   # lift z = detected_z + 20 cm after grasping
 
     # Hardcoded grasp positions in base_link frame.
     # Used instead of the detected pose — more reliable once the robot has
@@ -65,10 +65,10 @@ class PickupNode(Node):
     #   x = ±7 cm lateral spread (right arm +x, left arm -x)
     #   y = 0.40 m forward from robot base
     #   z = 0.15 m — final grasp height (top surface of pillow)
-    HARDCODED_GRASP_X_RIGHT =  0.07
-    HARDCODED_GRASP_X_LEFT  = -0.07
-    HARDCODED_GRASP_Y       =  0.40
-    HARDCODED_GRASP_Z       =  0.15
+    HARDCODED_GRASP_X_RIGHT =  -0.1
+    HARDCODED_GRASP_X_LEFT  = 0.1
+    HARDCODED_GRASP_Y       =  -0.40
+    HARDCODED_GRASP_Z       =  0.18
 
     def __init__(self):
         super().__init__('pickup_task3')
@@ -226,30 +226,67 @@ class PickupNode(Node):
             return None
         return future.result()
 
-    def plan_and_execute(self, arm_name: str, pose: Pose, duration: float = 3.0) -> bool:
-        """Send an IK plan+execute request for the given arm."""
+    def _make_plan_request(self, arm_name: str, pose: Pose, duration: float = 3.0) -> PlanToTarget.Request:
+        """Build a PlanToTarget request without sending it."""
         request = PlanToTarget.Request()
         request.arm_name = arm_name
         request.target_pose = pose
         request.use_orientation = True
         request.execute = True
         request.duration = duration
+        return request
 
-        pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
-        self.get_logger().info(f'Planning+executing {arm_name} arm to {pos_str}')
-
-        result = self.call_service_sync(request)
+    def _check_result(self, arm_name: str, result) -> bool:
+        """Log and return success/failure for one IK result."""
         if result is None:
             return False
         if result.success:
             self.get_logger().info(
-                f'  SUCCESS: {result.message} | '
+                f'  {arm_name} SUCCESS: {result.message} | '
                 f'pos_err={result.position_error:.4f}m  '
                 f'ori_err={np.degrees(result.orientation_error):.1f}°'
             )
             return True
-        self.get_logger().warn(f'  FAILED: {result.message}')
+        self.get_logger().warn(f'  {arm_name} FAILED: {result.message}')
         return False
+
+    def plan_and_execute(self, arm_name: str, pose: Pose, duration: float = 3.0) -> bool:
+        """Send an IK plan+execute request for the given arm."""
+        pos_str = f'({pose.position.x:.3f}, {pose.position.y:.3f}, {pose.position.z:.3f})'
+        self.get_logger().info(f'Planning+executing {arm_name} arm to {pos_str}')
+
+        request = self._make_plan_request(arm_name, pose, duration)
+        result = self.call_service_sync(request)
+        return self._check_result(arm_name, result)
+
+    def plan_and_execute_both(self, r_pose: Pose, l_pose: Pose, duration: float = 5.0) -> bool:
+        """Send IK requests for both arms simultaneously and wait for both to finish."""
+        self.get_logger().info(
+            f'Planning+executing BOTH arms simultaneously: '
+            f'right=({r_pose.position.x:.3f}, {r_pose.position.y:.3f}, {r_pose.position.z:.3f}), '
+            f'left=({l_pose.position.x:.3f}, {l_pose.position.y:.3f}, {l_pose.position.z:.3f})'
+        )
+
+        r_req = self._make_plan_request('right', r_pose, duration)
+        l_req = self._make_plan_request('left',  l_pose, duration)
+
+        r_future = self.plan_client.call_async(r_req)
+        l_future = self.plan_client.call_async(l_req)
+
+        # Spin until both futures complete
+        timeout = time.time() + duration + 15.0
+        while not (r_future.done() and l_future.done()):
+            rclpy.spin_once(self, timeout_sec=0.05)
+            if time.time() > timeout:
+                self.get_logger().error('Simultaneous lift timed out.')
+                return False
+
+        r_result = r_future.result() if r_future.done() and r_future.exception() is None else None
+        l_result = l_future.result() if l_future.done() and l_future.exception() is None else None
+
+        r_ok = self._check_result('right', r_result)
+        l_ok = self._check_result('left',  l_result)
+        return r_ok and l_ok
 
     def set_gripper(self, arm_name: str, position: float, duration: float = 2.0, hold: bool = False):
         """Set gripper position via wrapper node.
@@ -386,11 +423,8 @@ class PickupNode(Node):
                 self.transition_to(PickupState.LIFT)
 
             elif self.state == PickupState.LIFT:
-                # Lift right arm first, then left — pillow is flexible so sequential is fine
-                self.get_logger().info('Lifting both arms...')
-                if not self.plan_and_execute('right', r_lift, duration=5.0):
-                    return False
-                if not self.plan_and_execute('left', l_lift, duration=5.0):
+                self.get_logger().info('Lifting both arms simultaneously...')
+                if not self.plan_and_execute_both(r_lift, l_lift, duration=5.0):
                     return False
                 self.transition_to(PickupState.DONE)
 
