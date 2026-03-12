@@ -346,7 +346,7 @@ class CoordinatorNode(Node):
                     f'Re-detection complete. Averaged pose: ({avg_x:.3f}, {avg_y:.3f}, {avg_z:.3f})'
                 )
                 self._redetect_sweep_active = False
-                # Publish refined averaged pose so pickup.py uses it instead of raw perception
+                # Publish refined averaged pose so task2_pickup.py uses it instead of raw perception
                 refined_pose = PoseStamped()
                 refined_pose.header.stamp = self.get_clock().now().to_msg()
                 refined_pose.header.frame_id = 'base_link'
@@ -424,7 +424,7 @@ class CoordinatorNode(Node):
             elif elapsed > self.pickup_timeout:
                 self._fail(
                     f"Pickup timed out after {self.pickup_timeout:.0f}s. "
-                    f"Is pickup.py running?"
+                    f"Is task2_pickup.py running?"
                 )
 
         elif self.state == State.DONE:

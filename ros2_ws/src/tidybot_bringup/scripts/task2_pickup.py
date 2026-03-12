@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pickup.py — Pick up an object on real hardware using a simple state machine.
+task2_pickup.py — Pick up an object on real hardware using a simple state machine.
 
 State machine:
     approach -> descend -> grasp -> lift -> drop -> done
@@ -8,7 +8,7 @@ State machine:
 Standalone usage:
     ros2 launch tidybot_bringup real.launch.py use_planner:=true
     ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
-    ros2 run tidybot_bringup pickup.py
+    ros2 run tidybot_bringup task2_pickup.py
 
 Coordinator usage (auto_start mode — waits for trigger):
     ros2 launch tidybot_bringup coordinator.launch.py
