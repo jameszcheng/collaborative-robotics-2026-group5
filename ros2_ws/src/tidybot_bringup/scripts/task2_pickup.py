@@ -40,7 +40,7 @@ class PickupState(Enum):
 class PickupNode(Node):
     """Plan and execute a real-world block pickup using perception or fixed defaults."""
 
-    ORIENT_FINGERS_DOWN = (0.5, 0.5, 0.5, -0.5)  # (qw, qx, qy, qz)
+    ORIENT_FINGERS_DOWN = (0.707107, 0.0, 0.707107, 0.0)  # (qw, qx, qy, qz) — 90° rotated for horizontal banana
     SLEEP_POSE = [0.0, -1.80, 1.55, 0.0, 0.8, 0.0]  # [waist, shoulder, elbow, forearm_roll, wrist_angle, wrist_rotate]
 
     # Waypoint offsets from grasp target (meters)
