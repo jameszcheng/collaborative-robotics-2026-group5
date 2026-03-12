@@ -69,7 +69,7 @@ import time
 import math
 from datetime import datetime
 
-VERSION = "1.0.0-object"
+VERSION = "1.2.0-task3"
 
 
 # Hardcoded command-frame rotation (applies to BOTH sim and real).
@@ -118,7 +118,7 @@ class NavigateToObject(Node):
         self.declare_parameter('mode', 'object')     # 'object','goto','circle','reset_origin','test'
         self.declare_parameter('goal_x', 0.0)
         self.declare_parameter('goal_y', 0.0)
-        self.declare_parameter('goal_tolerance', 0.05)
+        self.declare_parameter('goal_tolerance', 0.03)  # tighter: arm reach precision matters
         self.declare_parameter('waypoints', [0.0])
         self.declare_parameter('max_v', 0.2)
         self.declare_parameter('max_omega', 2.0)
@@ -144,10 +144,10 @@ class NavigateToObject(Node):
 
         # --- NEW: object navigation parameters ---
         self.declare_parameter('standoff_dist', 0.4)   # metres — stop this far from the object
-        self.declare_parameter('lateral_offset', 0.15)  # metres — positive = shift left (to line up right arm)
+        self.declare_parameter('lateral_offset', 0.0)   # 0.0 for bimanual (centred); 0.15 for right-arm-only
         self.declare_parameter('pose_timeout', 30.0)    # seconds to wait for first object pose
         self.declare_parameter('face_object', True)     # align to face the object after reaching standoff
-        self.declare_parameter('pose_samples', 5)       # average this many pose readings before locking goal
+        self.declare_parameter('pose_samples', 15)      # more samples = better average before locking goal
 
         # Read params
         self.kp            = float(self.get_parameter('kp').value)
@@ -247,7 +247,9 @@ class NavigateToObject(Node):
         self._object_goal_set = False                  # True once we've computed standoff goal
         self._object_goal_x = 0.0
         self._object_goal_y = 0.0
-        self._object_face_yaw = 0.0            # yaw to face the object
+        self._object_x = 0.0                   # object position in origin frame (for live face-yaw recompute)
+        self._object_y = 0.0
+        self._object_face_yaw = 0.0            # yaw to face the object (recomputed at standoff)
         self._object_aligning = False           # True after reaching standoff, aligning yaw
         self._waiting_start_time = None         # when we started waiting for pose
 
@@ -583,7 +585,11 @@ class NavigateToObject(Node):
             )
             obj_x, obj_y = rotate_xy(obj_x, obj_y, self.command_frame_offset)
 
-        # Yaw to face the object from the standoff position
+        # Store object position so we can recompute face yaw from actual standoff position
+        self._object_x = obj_x
+        self._object_y = obj_y
+
+        # Nominal face yaw (will be refreshed from actual robot position at standoff)
         self._object_face_yaw = math.atan2(
             obj_y - self._object_goal_y,
             obj_x - self._object_goal_x,
@@ -740,10 +746,26 @@ class NavigateToObject(Node):
         desired_heading = np.arctan2(dy, dx)
         heading_error = wrap_angle(desired_heading - self.current_theta)
 
-        v = np.clip(self.kp * distance, -self.max_v, self.max_v)
-        omega = np.clip(2.0 * self.kp * heading_error, -self.max_omega, self.max_omega)
+        # Fix 1: stop-and-rotate when very misaligned — don't drive sideways arcs
+        if abs(heading_error) > np.pi / 3:  # > 60°: rotate in place only
+            omega = float(np.clip(2.0 * self.kp * heading_error, -self.max_omega, self.max_omega))
+            cmd = Twist()
+            cmd.linear.x = 0.0
+            cmd.angular.z = omega
+            self.cmd_vel_pub.publish(cmd)
+            return False
 
-        if abs(heading_error) > np.pi / 4:
+        # Fix 2: proportional slowdown zone — ramp speed in last 0.2 m to avoid overshoot
+        SLOWDOWN_ZONE = 0.2  # metres
+        if distance < SLOWDOWN_ZONE:
+            v = max(0.05, self.max_v * (distance / SLOWDOWN_ZONE))
+        else:
+            v = float(np.clip(self.kp * distance, 0.0, self.max_v))
+
+        omega = float(np.clip(2.0 * self.kp * heading_error, -self.max_omega, self.max_omega))
+
+        # Fix 3: tighter heading threshold — reduce forward speed when >30° off heading
+        if abs(heading_error) > np.pi / 6:  # > 30°
             v *= 0.3
 
         cmd = Twist()
@@ -756,7 +778,16 @@ class NavigateToObject(Node):
     # Align yaw to face the object
     # ------------------------------------------------------------------
     def _align_to_object(self) -> bool:
-        """Rotate in place to face the object. Returns True when aligned."""
+        """Rotate in place to face the object. Returns True when aligned.
+
+        Face yaw is recomputed from the actual robot position at standoff so that
+        small positioning errors don't cause the robot to face slightly off-center.
+        """
+        # Recompute live from current position toward stored object position
+        self._object_face_yaw = math.atan2(
+            self._object_y - self.current_y,
+            self._object_x - self.current_x,
+        )
         yaw_error = wrap_angle(self._object_face_yaw - self.current_theta)
 
         if abs(yaw_error) <= self.yaw_tolerance:
