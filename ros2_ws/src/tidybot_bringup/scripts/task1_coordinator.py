@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-coordinator_node.py — Orchestrates the full pick-and-place pipeline.
+task1_coordinator.py — Orchestrates the full pick-and-place pipeline.
 
 Sequences: NLP/manual trigger -> perception -> navigation -> re-detection -> pickup
 
