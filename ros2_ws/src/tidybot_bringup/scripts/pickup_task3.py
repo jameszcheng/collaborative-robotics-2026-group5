@@ -406,14 +406,7 @@ class PickupNode(Node):
 # ------------------------------------------------------------------
 
 def _run_pickup_once(node: PickupNode):
-    node.get_logger().info('Waiting for object detection...')
-    if not node.wait_for_object_detection(timeout=15.0, min_confidence=0.4):
-        node.get_logger().error('No object detected. Aborting.')
-        node.get_logger().error('Make sure detect_object_real_task3.py is running and camera can see the pillow.')
-        node.pickup_complete_pub.publish(Bool(data=False))
-        return 1
-
-    node.get_logger().info('Object detection ready!')
+    node.get_logger().info('Skipping object detection — using hardcoded grasp positions.')
     ok = node.run_state_machine()
     if not ok:
         node.get_logger().error('Pickup failed.')

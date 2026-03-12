@@ -51,6 +51,8 @@ install(PROGRAMS
   scripts/navigate_to_object.py
   scripts/coordinator_node.py
   scripts/go_to_sleep.py
+  scripts/pickup_task3.py
+  scripts/navigate_to_object_task3.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -11,7 +11,7 @@ TERMINAL 1 — Launch the robot
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 2 — Run object detection
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=banana
+  ros2 run tidybot_bringup detect_object_real.py --ros-args -p target_label:=pillow
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TERMINAL 3 — Navigate to detected object
@@ -118,7 +118,7 @@ class NavigateToObject(Node):
         self.declare_parameter('mode', 'object')     # 'object','goto','circle','reset_origin','test'
         self.declare_parameter('goal_x', 0.0)
         self.declare_parameter('goal_y', 0.0)
-        self.declare_parameter('goal_tolerance', 0.03)  # tighter: arm reach precision matters
+        self.declare_parameter('goal_tolerance', 0.05)
         self.declare_parameter('waypoints', [0.0])
         self.declare_parameter('max_v', 0.2)
         self.declare_parameter('max_omega', 2.0)
@@ -144,10 +144,10 @@ class NavigateToObject(Node):
 
         # --- NEW: object navigation parameters ---
         self.declare_parameter('standoff_dist', 0.4)   # metres — stop this far from the object
-        self.declare_parameter('lateral_offset', 0.0)   # 0.0 for bimanual (centred); 0.15 for right-arm-only
+        self.declare_parameter('lateral_offset', 0.15)  # metres — positive = shift left (to line up right arm)
         self.declare_parameter('pose_timeout', 30.0)    # seconds to wait for first object pose
         self.declare_parameter('face_object', True)     # align to face the object after reaching standoff
-        self.declare_parameter('pose_samples', 15)      # more samples = better average before locking goal
+        self.declare_parameter('pose_samples', 5)       # average this many pose readings before locking goal
 
         # Read params
         self.kp            = float(self.get_parameter('kp').value)
@@ -241,17 +241,13 @@ class NavigateToObject(Node):
         self._sim_goal_sent_time = None
 
         # --- Object pose state ---
-        # In task3 we run without a coordinator, so start ready to accept poses immediately.
-        # Set to False only when running under a coordinator that sends /coordinator/nav_goal.
-        self._nav_goal_received = True                 # True = accept poses; False = wait for coordinator
+        self._nav_goal_received = False                # True once coordinator sends a nav_goal
         self._pose_buffer = []                         # list of (x, y) from received poses
         self._object_pose_ready = False                # True once we have enough samples
         self._object_goal_set = False                  # True once we've computed standoff goal
         self._object_goal_x = 0.0
         self._object_goal_y = 0.0
-        self._object_x = 0.0                   # object position in origin frame (for live face-yaw recompute)
-        self._object_y = 0.0
-        self._object_face_yaw = 0.0            # yaw to face the object (recomputed at standoff)
+        self._object_face_yaw = 0.0            # yaw to face the object
         self._object_aligning = False           # True after reaching standoff, aligning yaw
         self._waiting_start_time = None         # when we started waiting for pose
 
@@ -317,11 +313,6 @@ class NavigateToObject(Node):
             PoseStamped, '/coordinator/nav_goal', self._nav_goal_callback, 10
         )
 
-        # Coordinator return-to-origin: navigate back to (0, 0) in origin frame after pickup
-        self.create_subscription(
-            Empty, '/coordinator/return_to_origin', self._return_to_origin_cb, 10
-        )
-
         # --- Control timer (50 Hz) ---
         self.create_timer(0.02, self.control_loop)
 
@@ -358,20 +349,6 @@ class NavigateToObject(Node):
             f'Nav goal injected directly: base_link=({msg.pose.position.x:.3f}, {msg.pose.position.y:.3f}) '
             f'-> odom=({odom_x:.3f}, {odom_y:.3f})'
         )
-
-    # ------------------------------------------------------------------
-    # Return-to-origin callback
-    # ------------------------------------------------------------------
-    def _return_to_origin_cb(self, msg: Empty):
-        """Coordinator requests return to origin (0, 0) after pickup."""
-        self.get_logger().info('Return-to-origin command received. Navigating back to (0, 0)...')
-        self.mode = 'goto'
-        # (0, 0) rotated by any angle is still (0, 0), no command_frame rotation needed
-        self.waypoints = [(0.0, 0.0)]
-        self.waypoint_index = 0
-        self._final_yaw_done = False
-        self.start_time = None
-        self.running = True
 
     # ------------------------------------------------------------------
     # Object pose callback
@@ -537,9 +514,6 @@ class NavigateToObject(Node):
     # ------------------------------------------------------------------
     def _compute_object_goal(self):
         """Step 2: Average pose samples, transform to origin frame, compute standoff + lateral offset."""
-        if not self.origin_set:
-            self.get_logger().warning('_compute_object_goal called before origin is set — skipping.')
-            return
         xs = [p[0] for p in self._pose_buffer]
         ys = [p[1] for p in self._pose_buffer]
         obj_x_odom = float(np.mean(xs))
@@ -590,11 +564,7 @@ class NavigateToObject(Node):
             )
             obj_x, obj_y = rotate_xy(obj_x, obj_y, self.command_frame_offset)
 
-        # Store object position so we can recompute face yaw from actual standoff position
-        self._object_x = obj_x
-        self._object_y = obj_y
-
-        # Nominal face yaw (will be refreshed from actual robot position at standoff)
+        # Yaw to face the object from the standoff position
         self._object_face_yaw = math.atan2(
             obj_y - self._object_goal_y,
             obj_x - self._object_goal_x,
@@ -783,16 +753,7 @@ class NavigateToObject(Node):
     # Align yaw to face the object
     # ------------------------------------------------------------------
     def _align_to_object(self) -> bool:
-        """Rotate in place to face the object. Returns True when aligned.
-
-        Face yaw is recomputed from the actual robot position at standoff so that
-        small positioning errors don't cause the robot to face slightly off-center.
-        """
-        # Recompute live from current position toward stored object position
-        self._object_face_yaw = math.atan2(
-            self._object_y - self.current_y,
-            self._object_x - self.current_x,
-        )
+        """Rotate in place to face the object. Returns True when aligned."""
         yaw_error = wrap_angle(self._object_face_yaw - self.current_theta)
 
         if abs(yaw_error) <= self.yaw_tolerance:
@@ -914,7 +875,6 @@ class NavigateToObject(Node):
                 if self.running:
                     self.running = False
                     self.get_logger().info('All waypoints completed.')
-                    self.nav_complete_pub.publish(Bool(data=True))
                     self.save_results()
                 return
 
