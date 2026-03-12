@@ -241,7 +241,9 @@ class NavigateToObject(Node):
         self._sim_goal_sent_time = None
 
         # --- Object pose state ---
-        self._nav_goal_received = False                # True once coordinator sends a nav_goal
+        # In task3 we run without a coordinator, so start ready to accept poses immediately.
+        # Set to False only when running under a coordinator that sends /coordinator/nav_goal.
+        self._nav_goal_received = True                 # True = accept poses; False = wait for coordinator
         self._pose_buffer = []                         # list of (x, y) from received poses
         self._object_pose_ready = False                # True once we have enough samples
         self._object_goal_set = False                  # True once we've computed standoff goal
