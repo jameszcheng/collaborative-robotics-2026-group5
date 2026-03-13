@@ -645,11 +645,11 @@
       <div class="team-name">James Cheng</div>
       <div class="team-role">Perception · NLP Integration · Navigation · Coordinator</div>
       <ul class="team-contrib">
-        <li>Got YOLO perception pipeline working for real-time object detection</li>
-        <li>Integrated perception with NLP node for voice-driven object targeting</li>
-        <li>Integrated perception with navigation node for autonomous approach</li>
-        <li>Built coordinator node to orchestrate the full end-to-end pipeline</li>
-        <li>Contributed to bimanual manipulation (Task 3)</li>
+        <li>Built the YOLO perception pipeline for real-time object detection, later upgraded from YOLOv8 to YOLOv11</li>
+        <li>Rewrote <code>navigate_to_object.py</code> with standoff positioning, lateral offset, and coordinate transforms for arm-reachable approach</li>
+        <li>Built the original coordinator pipeline (<code>coordinator_node.py</code>) orchestrating the full detect → navigate → pick end-to-end flow</li>
+        <li>Integrated perception with NLP and navigation nodes for voice-driven object targeting and autonomous approach</li>
+        <li>Contributed to bimanual manipulation (Task 3) — built <code>test_bimanual.py</code> for dual-arm testing</li>
         <li>Developed the project website</li>
       </ul>
     </div>
