@@ -35,6 +35,7 @@ install(PROGRAMS
   scripts/test_full_robot.py
   scripts/test_tf.py
   scripts/test_planner_real.py
+  scripts/test_bimanual.py
   scripts/test_microphone.py
   scripts/diagnose_dynamixel.py
   scripts/example_state_machine.py
@@ -53,6 +54,10 @@ install(PROGRAMS
   scripts/go_to_sleep.py
   scripts/task1_coordinator.py
   scripts/task2_coordinator.py
+  scripts/detect_object_real_task3.py
+  scripts/pickup_task3.py
+  scripts/navigate_to_object_task3.py
+  scripts/coordinator_node_task3.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
