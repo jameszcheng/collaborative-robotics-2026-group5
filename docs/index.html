@@ -248,6 +248,22 @@
     }
     .callout strong { color: #58a6ff; }
 
+    /* ── Images ── */
+    .hero-img {
+      max-width: 520px;
+      width: 100%;
+      border-radius: 0.75rem;
+      border: 1px solid #21262d;
+      margin: 1.5rem auto 0;
+      display: block;
+    }
+    .inline-img {
+      max-width: 100%;
+      border-radius: 0.5rem;
+      border: 1px solid #21262d;
+      margin: 0.75rem 0;
+    }
+
     @media (max-width: 600px) {
       .nav-links { display: none; }
       .states { flex-direction: column; }
@@ -304,6 +320,9 @@
     mobile base with two 6-DOF WX250s arms, an Intel RealSense D435 depth camera on a pan-tilt
     mount, and an onboard Intel NUC running ROS2 Humble.
   </p>
+
+  <img src="images/tidybot_pic.jpg" alt="TidyBot2 with banana and bowl on tabletop" class="hero-img" />
+  <p style="font-size:0.8rem; text-align:center; color:#484f58; margin-top:0.5rem;">TidyBot2 with bimanual arms, pan-tilt RealSense camera, and test objects</p>
 
   <div class="card-grid card-grid-3" style="margin-top:2rem;">
     <div class="card">
@@ -375,7 +394,7 @@
         <td>Task 2 state machine — detect → navigate → pick up → drop in bowl/bin</td>
       </tr>
       <tr>
-        <td><code>coordinator_node.py</code></td>
+        <td><code>coordinator_node_task3.py</code></td>
         <td>tidybot_bringup/scripts/</td>
         <td>Task 3 state machine — detect → navigate → (redetect) → bimanual pick up</td>
       </tr>
@@ -542,6 +561,8 @@
         <strong>Tasks 1&amp;2:</strong> YOLOv11n on RGB frames, median depth patch, back-project to <code>base_link</code> via TF.<br/>
         <strong>Task 3:</strong> HSV color segmentation for red (dual hue bands 0–10 &amp; 170–180), largest contour above 500 px.
       </p>
+      <img src="images/yolo_pic.png" alt="YOLOv11 detecting a banana with bounding box" class="inline-img" />
+      <p style="font-size:0.75rem; color:#484f58; margin:0;">YOLOv11 real-time detection on TidyBot2 camera feed</p>
     </div>
     <div class="card">
       <h3>🧭 Navigation</h3>
@@ -715,7 +736,7 @@
       <ul class="team-contrib" style="font-size:0.875rem;">
         <li><code>scripts/task1_coordinator.py</code> — Task 1 state machine</li>
         <li><code>scripts/task2_coordinator.py</code> — Task 2 state machine</li>
-        <li><code>scripts/coordinator_node.py</code> — Task 3 state machine</li>
+        <li><code>scripts/coordinator_node_task3.py</code> — Task 3 state machine</li>
         <li><code>scripts/detect_object_real.py</code> — YOLOv11 perception</li>
         <li><code>scripts/detect_object_real_task3.py</code> — HSV pillow detector</li>
         <li><code>scripts/navigate_to_object.py</code> — Navigation (Tasks 1&amp;2)</li>
