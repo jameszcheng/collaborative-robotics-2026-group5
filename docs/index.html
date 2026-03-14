@@ -439,22 +439,7 @@
   <!-- Data flow diagram -->
   <div class="pipeline">
     <h3 style="margin-bottom:1.25rem;">End-to-End Data Flow</h3>
-    <pre style="font-size:0.78rem;">
-  User Speech → Google Gemini (NLP) → {action, object}
-      │
-      ▼
-  ┌──────────────────────────────────────────────┐
-  │  Coordinator (task1 / task2 / task3)         │
-  └──────┬──────────────┬──────────────┬─────────┘
-         │              │              │
-         ▼              ▼              ▼
-  Perception        Navigation      Pickup
-  ─────────         ──────────      ──────
-  Tasks 1&2:        Tasks 1&2:      Task 1: hold
-   YOLOv11 +         0.4m standoff  Task 2: drop 25cm R
-   depth→base_link  Task 3:         Task 3: bimanual
-  Task 3:            0.3m standoff   R+L grasp→lift→
-   HSV color seg                     rotate→release</pre>
+    <img src="images/architecture.svg" alt="System architecture diagram showing ROS2 node communication" style="width:100%; max-width:900px; display:block; margin:0 auto;" />
   </div>
 
   <!-- State Machine -->
