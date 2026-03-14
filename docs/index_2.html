@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Group 5 — ME 326 Collaborative Robotics 2026</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      line-height: 1.7;
+    }
+    a { color: #58a6ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13,17,23,0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #21262d;
+      padding: 0 2rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    .nav-logo { font-weight: 700; font-size: 1rem; color: #f0f6fc; }
+    .nav-links { display: flex; gap: 1.5rem; }
+    .nav-links a { font-size: 0.875rem; color: #8b949e; }
+    .nav-links a:hover { color: #f0f6fc; text-decoration: none; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d2035 100%);
+      border-bottom: 1px solid #21262d;
+      padding: 5rem 2rem 4rem;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: #1f6feb22;
+      border: 1px solid #1f6feb66;
+      color: #58a6ff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.9rem;
+      border-radius: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 800;
+      color: #f0f6fc;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+    .hero h1 span { color: #58a6ff; }
+    .hero p {
+      font-size: 1.15rem;
+      color: #8b949e;
+      max-width: 640px;
+      margin: 0 auto 2rem;
+    }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.4rem;
+      border-radius: 0.4rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; text-decoration: none; }
+    .btn-primary { background: #1f6feb; color: #fff; }
+    .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+
+    /* ── Sections ── */
+    section { padding: 5rem 2rem; max-width: 1000px; margin: 0 auto; }
+    section + section { padding-top: 2rem; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #58a6ff;
+      margin-bottom: 0.6rem;
+    }
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+      font-weight: 700;
+      color: #f0f6fc;
+      margin-bottom: 1.5rem;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: #f0f6fc;
+      margin-bottom: 0.75rem;
+    }
+    p { color: #8b949e; margin-bottom: 1rem; }
+    .divider { border: none; border-top: 1px solid #21262d; margin: 0; }
+
+    /* ── Cards ── */
+    .card-grid { display: grid; gap: 1.25rem; }
+    .card-grid-2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .card-grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #388bfd66; }
+    .card-icon {
+      font-size: 1.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    /* ── Pipeline / State Machine ── */
+    .pipeline {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 2rem;
+      margin: 1.5rem 0;
+    }
+    .states {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: center;
+      margin: 1.5rem 0;
+    }
+    .state-box {
+      background: #0d2035;
+      border: 1px solid #1f6feb66;
+      border-radius: 0.4rem;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #58a6ff;
+      white-space: nowrap;
+    }
+    .state-box.failed {
+      background: #2d1115;
+      border-color: #f8514966;
+      color: #f85149;
+    }
+    .arrow { color: #30363d; font-size: 1.2rem; font-weight: 300; }
+    .state-desc {
+      background: #0d1117;
+      border-left: 3px solid #1f6feb;
+      padding: 0.75rem 1rem;
+      border-radius: 0 0.4rem 0.4rem 0;
+      margin-bottom: 0.75rem;
+    }
+    .state-desc strong { color: #58a6ff; }
+    .state-desc p { margin: 0; font-size: 0.9rem; color: #8b949e; }
+
+    /* ── Code block ── */
+    pre {
+      background: #0d1117;
+      border: 1px solid #21262d;
+      border-radius: 0.5rem;
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #c9d1d9;
+      margin: 1rem 0 1.5rem;
+    }
+    code { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.85em; color: #79c0ff; }
+
+    /* ── Video placeholder ── */
+    .video-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+    .video-embed {
+      aspect-ratio: 16/9;
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+    .video-embed iframe { width: 100%; height: 100%; border: none; }
+    .video-placeholder {
+      aspect-ratio: 16/9;
+      background: #161b22;
+      border: 2px dashed #30363d;
+      border-radius: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #484f58;
+      font-size: 0.9rem;
+      gap: 0.5rem;
+    }
+    .video-placeholder .icon { font-size: 2.5rem; }
+    .video-label { font-size: 0.8rem; color: #8b949e; margin-top: 0.5rem; text-align: center; }
+
+    /* ── Team ── */
+    .team-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .team-card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 0.75rem;
+      padding: 1.5rem;
+    }
+    .team-name { font-size: 1.05rem; font-weight: 700; color: #f0f6fc; margin-bottom: 0.25rem; }
+    .team-role { font-size: 0.8rem; color: #58a6ff; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.75rem; }
+    .team-contrib { font-size: 0.875rem; color: #8b949e; }
+    .team-contrib li { margin-bottom: 0.3rem; list-style: disc; margin-left: 1.1rem; }
+
+    /* ── Node table ── */
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.875rem; }
+    th { background: #161b22; color: #8b949e; font-weight: 600; text-align: left; padding: 0.6rem 0.75rem; border-bottom: 1px solid #21262d; }
+    td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #21262d; color: #c9d1d9; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Footer ── */
+    footer {
+      background: #161b22;
+      border-top: 1px solid #21262d;
+      padding: 2.5rem 2rem;
+      text-align: center;
+      color: #484f58;
+      font-size: 0.875rem;
+    }
+    footer a { color: #8b949e; }
+
+    /* ── Highlight boxes ── */
+    .callout {
+      background: #0d2035;
+      border: 1px solid #1f6feb33;
+      border-left: 3px solid #1f6feb;
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: #8b949e;
+    }
+    .callout strong { color: #58a6ff; }
+
+    @media (max-width: 600px) {
+      .nav-links { display: none; }
+      .states { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ───────────────────────── NAV ───────────────────────── -->
+<nav>
+  <span class="nav-logo">ME 326 — Group 5</span>
+  <div class="nav-links">
+    <a href="#problem">Problem</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#results">Results</a>
+    <a href="#team">Team</a>
+    <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">GitHub</a>
+  </div>
+</nav>
+
+<!-- ───────────────────────── HERO ───────────────────────── -->
+<div class="hero">
+  <div class="hero-badge">ME 326 · Stanford University · Winter 2026</div>
+  <h1>Voice-Commanded <span>Mobile Pick-and-Place</span></h1>
+  <p>
+    Group 5 &mdash; Monday 6&ndash;7:30pm &nbsp;·&nbsp;
+    TidyBot2 with bimanual WX250s arms, RealSense depth camera,
+    and a Gemini-powered natural language interface.
+  </p>
+  <div class="hero-buttons">
+    <a class="btn btn-primary" href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">
+      ⬡ View on GitHub
+    </a>
+    <a class="btn btn-secondary" href="#results">
+      ▶ Watch Demos
+    </a>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── PROBLEM ───────────────────────── -->
+<section id="problem">
+  <div class="section-label">Overview</div>
+  <h2>Problem Statement</h2>
+  <p>
+    Household and laboratory environments contain objects that constantly need to be retrieved,
+    reorganized, or moved on demand. A robot that can understand <em>natural spoken commands</em>
+    and autonomously execute multi-step manipulation tasks—locating, navigating to, and grasping
+    objects—would be a meaningful real-world collaborator.
+  </p>
+  <p>
+    We built a fully integrated pipeline on the <strong>TidyBot2</strong> platform: a holonomic
+    mobile base with two 6-DOF WX250s arms, an Intel RealSense D435 depth camera on a pan-tilt
+    mount, and an onboard Intel NUC running ROS2 Humble.
+  </p>
+
+  <div class="card-grid card-grid-3" style="margin-top:2rem;">
+    <div class="card">
+      <div class="card-icon">🗣️</div>
+      <h3>Task 1 — Object Retrieval</h3>
+      <p>
+        User says <em>"retrieve the banana."</em> Robot detects the object with YOLO,
+        navigates to it, grasps it with the right arm, and <strong>returns to the starting
+        position</strong> while holding the object.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <h3>Task 2 — Pick and Place</h3>
+      <p>
+        User says <em>"pick up the banana and place it in the bin."</em> Robot detects,
+        navigates, grasps, then <strong>drops the object 25 cm to its right</strong>—into
+        a bowl or bin positioned beside the robot.
+      </p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <h3>Task 3 — Bimanual Pillow Retrieval</h3>
+      <p>
+        Robot detects a red pillow using an HSV-based color detector, navigates to it,
+        and performs a <strong>coordinated two-arm grasp</strong> to pick it up — demonstrating
+        bimanual manipulation for large or deformable objects a single arm cannot reliably handle.
+      </p>
+    </div>
+  </div>
+
+  <div class="callout" style="margin-top:2rem;">
+    <strong>Core challenge:</strong> Bridging the gap between noisy real-time perception
+    (depth sensor uncertainty, YOLO false positives) and reliable robot action
+    (navigation accuracy, successful grasping) in an unstructured tabletop environment—
+    all triggered by a single natural language utterance.
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── ARCHITECTURE ───────────────────────── -->
+<section id="architecture">
+  <div class="section-label">Method</div>
+  <h2>System Architecture</h2>
+  <p>
+    The system is composed of four specialized ROS2 nodes orchestrated by a central coordinator.
+    Each node has a single responsibility; the coordinator sequences them via topics and state transitions.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Node</th><th>File</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>task1_coordinator.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 1 state machine — detect → navigate → pick up → return to start</td>
+      </tr>
+      <tr>
+        <td><code>task2_coordinator.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 2 state machine — detect → navigate → pick up → drop in bowl/bin</td>
+      </tr>
+      <tr>
+        <td><code>detect_object_real.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>YOLOv8 + RealSense depth → 3D object pose in base_link</td>
+      </tr>
+      <tr>
+        <td><code>navigate_to_object.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Proportional controller → standoff position + yaw alignment</td>
+      </tr>
+      <tr>
+        <td><code>task1_pickup.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 1 arm node — approach → descend → grasp → lift (holds object)</td>
+      </tr>
+      <tr>
+        <td><code>task2_pickup.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 2 arm node — approach → descend → grasp → lift → drop 25 cm right</td>
+      </tr>
+      <tr style="border-top: 2px solid #1f6feb44;">
+        <td><code>coordinator_node_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 3 state machine — detect pillow → navigate → bimanual pick up (skip_redetect mode)</td>
+      </tr>
+      <tr>
+        <td><code>detect_object_real_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>HSV color segmentation for red pillow → contour centroid → 3D pose or hardcoded fallback</td>
+      </tr>
+      <tr>
+        <td><code>navigate_to_object_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Bimanual-centred navigation (lateral_offset=0) with overshoot-prevention controller</td>
+      </tr>
+      <tr>
+        <td><code>pickup_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Bimanual pillow pickup — R_APPROACH → R_DESCEND → R_GRASP → L_APPROACH → L_DESCEND → L_GRASP → LIFT</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Data flow diagram -->
+  <div class="pipeline">
+    <h3 style="margin-bottom:1.25rem;">End-to-End Data Flow</h3>
+    <pre style="font-size:0.78rem;">
+  User Speech
+      │
+      ▼
+  Google Gemini (NLP)  ──→  {action: "retrieve", object: "banana"}
+      │
+      ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │          task1_coordinator / task2_coordinator          │
+  │                  (Central State Machine)                │
+  └───────┬────────────────────┬────────────────────────────┘
+          │                    │
+          ▼                    ▼
+  detect_object_real.py    navigate_to_object.py
+  YOLOv8 on RGB frame      Proportional controller
+  Median depth patch        → standoff + yaw align
+  Back-project → base_link  → tilt camera down 0.5 rad
+  /perception/object_pose  /coordinator/nav_complete
+          │                    │
+          └────────┬───────────┘
+                   ▼
+           SEARCHING: accumulate 3 confident
+           detections → averaged x/y nav goal
+                   │
+                   ▼
+           PAUSE: settling delay (3 s)
+           stale perception data clears
+                   │
+                   ▼
+         task1_pickup.py              task2_pickup.py
+         APPROACH → DESCEND           APPROACH → DESCEND
+         → GRASP → LIFT               → GRASP → LIFT → DROP
+         (holds object)               (releases 25 cm right)
+                   │
+                   ▼
+           /coordinator/pickup_complete
+                   │
+         ┌─────────┴────────────┐
+         ▼                      ▼
+    Task 1: RETURNING      Task 2: DONE
+    robot drives back        → IDLE
+    to origin (0,0)
+         │
+         ▼
+       DONE → IDLE
+    </pre>
+  </div>
+
+  <!-- State Machine -->
+  <h3 style="margin-top:2rem;">Coordinator State Machines</h3>
+  <p>
+    Each task has its own coordinator with a dedicated finite state machine. States share a common
+    pattern: Task 1 adds a <strong>RETURNING</strong> state to drive back to the start after pickup;
+    Task 2 ends immediately after dropping the object; Task 3 uses a streamlined machine that skips
+    the REDETECTING phase entirely (<code>skip_redetect=True</code>), going directly from navigation
+    to bimanual pickup using hardcoded grasp coordinates.
+  </p>
+
+  <div class="pipeline">
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin-bottom:0.5rem;">Task 1 — Object Retrieval</p>
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PAUSE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">RETURNING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin: 1rem 0 0.5rem;">Task 2 — Pick and Place</p>
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PAUSE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin: 0.75rem 0 1.5rem;">
+      Any state can transition to FAILED on timeout, which sends an e-stop and resets to IDLE.
+    </div>
+
+    <div class="state-desc">
+      <strong>IDLE</strong>
+      <p>Waits for a voice command from the Gemini NLP node (<code>/nlp/response</code>) or a manual string trigger on <code>/coordinator/start</code>. Ignores new triggers while a task is in progress.</p>
+    </div>
+    <div class="state-desc">
+      <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
+      <p>Publishes the target label to the YOLO detector. Collects <strong>3 confident detections</strong> (≥0.4 confidence), averages their x/y to form a stable navigation goal, then publishes it to the navigator. Averaging multiple frames prevents wrong-direction drives from single noisy depth readings.</p>
+    </div>
+    <div class="state-desc">
+      <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 90s)</span>
+      <p>Waits for <code>/coordinator/nav_complete</code> from <code>navigate_to_object.py</code>. The robot drives to a standoff ~0.4m in front of the object and aligns yaw. On arrival, the coordinator tilts the camera down (0.0 pan, 0.5 rad tilt) and transitions to PAUSE.</p>
+    </div>
+    <div class="state-desc">
+      <strong>PAUSE</strong>
+      <p>A configurable settling delay (default 3 s) that lets the robot stop moving and stale perception data age out before pickup is triggered. No signals are sent; the coordinator simply waits.</p>
+    </div>
+    <div class="state-desc">
+      <strong>PICKING_UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 120s)</span>
+      <p>Publishes an <code>Empty</code> trigger to the pickup node and waits for success/failure.<br/>
+      <em>Task 1 (<code>task1_pickup.py</code>):</em> APPROACH → DESCEND → GRASP → LIFT — holds the object at lift height.<br/>
+      <em>Task 2 (<code>task2_pickup.py</code>):</em> APPROACH → DESCEND → GRASP → LIFT → DROP — moves arm 25 cm right and releases into bowl/bin.</p>
+    </div>
+    <div class="state-desc">
+      <strong>RETURNING</strong> <span style="color:#484f58;font-size:0.8rem;">(Task 1 only · timeout: 120s)</span>
+      <p>Publishes <code>/coordinator/return_to_origin</code>. The navigation node drives the robot back to the saved start position (0, 0). Transitions to DONE when <code>nav_complete</code> arrives.</p>
+    </div>
+    <div class="state-desc">
+      <strong>DONE / FAILED</strong>
+      <p>DONE logs success, waits 2 s, returns to IDLE. FAILED publishes a zero-velocity e-stop to <code>/cmd_vel</code> and returns to IDLE immediately.</p>
+    </div>
+  </div>
+
+  <!-- Task 3 Data Flow -->
+  <div class="pipeline" style="margin-top:2rem;">
+    <h3 style="margin-bottom:1.25rem;">Task 3 — End-to-End Data Flow (Bimanual Pillow Retrieval)</h3>
+    <pre style="font-size:0.78rem;">
+  Manual trigger: ros2 topic pub /coordinator/start std_msgs/String "data: pillow" --once
+      │
+      ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │              coordinator_node_task3.py                  │
+  │        (skip_redetect=True — streamlined FSM)           │
+  └─────────────────────────┬───────────────────────────────┘
+                             │
+              ─ ─ ─ ─ ─ Phase 1: SEARCHING ─ ─ ─ ─ ─
+                             │
+                             ▼
+                   detect_object_real_task3.py
+                   HSV dual-band red mask (hue 0–10, 170–180)
+                   Largest contour centroid → image coords
+                   20th-pct mask depth → 3D back-projection
+                   Publishes /perception/object_pose
+                             │
+                   Coordinator collects 3 confident detections,
+                   averages x/y → stable navigation goal
+                             │
+              ─ ─ ─ ─ ─ Phase 2: NAVIGATING ─ ─ ─ ─ ─
+                             │
+                             ▼
+                   navigate_to_object_task3.py
+                   lateral_offset=0 (centred for bimanual)
+                   Stop-and-rotate when heading error &gt;60°
+                   Proportional slowdown in final 0.2 m
+                   Face-object yaw alignment at standoff
+                   Publishes /coordinator/nav_complete
+                             │
+              ─ ─ ─ ─ ─ Phase 3: PICKING_UP ─ ─ ─ ─ ─
+                   (skip_redetect=True: no re-detection phase)
+                             │
+                             ▼
+                   pickup_task3.py — Bimanual State Machine
+                   R_APPROACH  right arm above right grasp (+7 cm)
+                   R_DESCEND   right arm descends to z=0.15 m
+                   R_GRASP     right gripper closes
+                   L_APPROACH  left arm above left grasp (−7 cm)
+                   L_DESCEND   left arm descends to z=0.15 m
+                   L_GRASP     left gripper closes
+                   LIFT        both arms lift to z=0.30 m
+                             │
+                             ▼
+                   /coordinator/pickup_complete → DONE → IDLE
+    </pre>
+  </div>
+
+  <!-- Task 3 State Machine -->
+  <div class="pipeline" style="margin-top:1.5rem;">
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin-bottom:0.5rem;">Task 3 — Bimanual Pillow Retrieval</p>
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin: 0.5rem 0 1.25rem;">
+      <code>skip_redetect=True</code> (default) bypasses the REDETECTING phase — pickup uses hardcoded grasp coordinates.
+      Any state transitions to FAILED on timeout, sending an e-stop and resetting to IDLE.
+    </div>
+
+    <div class="state-desc">
+      <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
+      <p>HSV detector identifies the red pillow. Collects <strong>3 confident detections</strong> (≥0.4 fill-ratio confidence) and averages their x/y to form a stable navigation goal. Filters out stale poses that arrived before the pipeline was triggered.</p>
+    </div>
+    <div class="state-desc">
+      <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 90s)</span>
+      <p>Robot drives to a <strong>0.4 m standoff</strong> centred in front of the pillow (lateral_offset=0 for bimanual reach). Three controller fixes prevent overshoot: stop-and-rotate when &gt;60° misaligned, proportional slowdown in the last 0.2 m, and a tighter 30° heading gate. Finalises with a yaw alignment to face the pillow.</p>
+    </div>
+    <div class="state-desc">
+      <strong>PICKING_UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 120s — 2× longer than single-arm)</span>
+      <p>Triggers <code>pickup_task3.py</code> via <code>/coordinator/pickup_trigger</code>. The 7-state bimanual sequence runs: right arm approaches and grasps the right end of the pillow (x=+7 cm), then the left arm approaches and grasps the left end (x=−7 cm), then both arms lift together to z=0.30 m. All grasp positions are hardcoded in <code>base_link</code> for reliability at known standoff.</p>
+    </div>
+  </div>
+
+  <!-- Nodes detail -->
+  <h3 style="margin-top:2rem;">Node Details</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>🎯 Perception Node</h3>
+      <p style="font-size:0.875rem;">
+        Runs <strong>YOLOv8</strong> on every RGB frame. For each detection, samples a
+        21×21 depth patch around the bounding box center and takes the <strong>median</strong>
+        (robust to sensor noise). Back-projects pixel + depth into the camera optical frame,
+        then transforms to <code>base_link</code> via the TF tree.
+        Publishes pose and confidence per frame.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🧭 Navigation Node</h3>
+      <p style="font-size:0.875rem;">
+        Receives the coordinator's pre-averaged goal. Computes a <strong>standoff position</strong>
+        0.4m behind the object with a 0.15m lateral offset (right-arm centering). Uses a
+        proportional controller (50 Hz): drive to standoff, then rotate in place to align yaw
+        within 5°. Locks odometry origin at startup to avoid drift.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🦾 Arm / Pickup Nodes</h3>
+      <p style="font-size:0.875rem;">
+        Two separate pickup nodes using the <strong>mink IK</strong> library with top-down grasps.<br/>
+        <strong>task1_pickup:</strong> 4 phases — APPROACH (10 cm above) → DESCEND (2 cm above) → GRASP → LIFT (25 cm up). Holds object.<br/>
+        <strong>task2_pickup:</strong> 5 phases — same start, adds DROP: moves arm 25 cm right and opens gripper. Includes internal camera sweep for close-range re-detection.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🗣️ NLP Interface</h3>
+      <p style="font-size:0.875rem;">
+        Records audio, transcribes via SpeechRecognition, and passes the text to
+        <strong>Google Gemini</strong>. Returns structured JSON
+        <code>{action, object, target}</code>. The object label is published at runtime
+        to dynamically configure the YOLO detector—no code changes needed per object.
+      </p>
+    </div>
+  </div>
+
+  <!-- Task 3 Node Cards -->
+  <h3 style="margin-top:2rem;">Task 3 Node Details</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>🔴 HSV Pillow Detector</h3>
+      <p style="font-size:0.875rem;">
+        Replaces YOLO with <strong>OpenCV HSV color segmentation</strong> tuned for a red pillow.
+        Red hue wraps at 180 in OpenCV, so two masks (hue 0–10 and 170–180) are ORed together.
+        Morphological open+close (7×7 ellipse kernel) removes noise. The largest red contour above
+        a minimum area threshold is taken as the detection. Confidence is the red-pixel fill ratio
+        inside the bounding box (0–1). The contour <strong>centroid via cv2.moments</strong> is used
+        for 3D back-projection — more accurate than the bounding box midpoint for an irregular pillow shape.
+        Depth is sampled at the <strong>20th percentile over the mask</strong> (front surface of pillow,
+        ignores background). A <code>use_hardcoded_pose</code> flag bypasses depth estimation entirely
+        and publishes a pre-measured fixed pose for reliable hardware runs.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🧭 Task 3 Navigation Node</h3>
+      <p style="font-size:0.875rem;">
+        Adapted from the Task 1/2 navigator with three key changes for bimanual operation.
+        <strong>lateral_offset=0.0</strong> (vs 0.15 m) centres the robot so both arms have equal reach.
+        Three overshoot-prevention fixes: (1) stop-and-rotate in place when heading error &gt;60°,
+        (2) proportional speed ramp in the final 0.2 m down to 0.05 m/s minimum,
+        (3) forward speed reduced by 70% when heading error &gt;30°.
+        After reaching standoff, rotates to align yaw toward the pillow from the actual arrived position.
+        Publishes <code>/coordinator/nav_complete</code> and also works standalone (no coordinator required).
+      </p>
+    </div>
+    <div class="card">
+      <h3>🦾🦾 Bimanual Pickup Node</h3>
+      <p style="font-size:0.875rem;">
+        7-state machine: <strong>R_APPROACH → R_DESCEND → R_GRASP → L_APPROACH → L_DESCEND → L_GRASP → LIFT</strong>.
+        Right arm grasps the right end of the pillow (x=+7 cm, y=0.40 m, z=0.15 m);
+        left arm grasps the left end (x=−7 cm, y=0.40 m, z=0.15 m). Both arms lift sequentially to z=0.30 m.
+        All grasp positions are <strong>hardcoded in base_link</strong> — more reliable than depth-estimated
+        poses at close range where the RealSense is less accurate.
+        Uses the shared <code>/plan_to_target</code> IK service with explicit arm name selection.
+        Both grippers controlled via the same wrapper node used in Tasks 1 &amp; 2.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🎛️ Task 3 Coordinator</h3>
+      <p style="font-size:0.875rem;">
+        Extends the base coordinator with a <code>skip_redetect</code> parameter (default <code>True</code>).
+        When enabled, the REDETECTING phase is skipped entirely — after navigation completes, pickup is
+        triggered immediately with hardcoded grasp coordinates. This avoids unreliable close-range depth
+        estimation without sacrificing pipeline automation.
+        <code>pickup_timeout</code> raised to 120 s (2× the single-arm timeout) to accommodate the 7-step
+        bimanual sequence. Stale-pose filtering via <code>_search_min_pose_stamp_sec</code> prevents
+        detections from before pipeline start from triggering wrong navigation goals.
+      </p>
+    </div>
+  </div>
+
+  <!-- Camera sweep -->
+  <h3 style="margin-top:2rem;">Camera Sweep in Task 2 Pickup</h3>
+  <p>
+    If the object is not immediately visible at the standoff position,
+    <code>task2_pickup.py</code> internally sweeps the pan-tilt camera across
+    6 positions before declaring failure. The sweep uses the same fixed angle
+    at which the first confident detection arrives—preventing cross-angle depth
+    mixing artifacts:
+  </p>
+  <pre>
+  Position 1: pan= 0.0,  tilt=0.5  (center, looking down steeply)
+  Position 2: pan= 0.0,  tilt=0.3  (center, shallower)
+  Position 3: pan=-0.3,  tilt=0.5  (left)
+  Position 4: pan=+0.3,  tilt=0.5  (right)
+  Position 5: pan=-0.3,  tilt=0.3  (left, shallower)
+  Position 6: pan=+0.3,  tilt=0.3  (right, shallower)</pre>
+
+  <h3 style="margin-top:2rem;">Perception Strategy: SEARCHING + PAUSE</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>SEARCHING — Navigation Goal (Tasks 1 &amp; 2)</h3>
+      <p style="font-size:0.875rem;">
+        Collects 3 confident <strong>YOLO</strong> detections from 1–2 m away and averages their x/y.
+        Single-frame depth at distance is noisy; averaging prevents wrong-direction
+        navigation while keeping the robot responsive.
+      </p>
+    </div>
+    <div class="card">
+      <h3>SEARCHING — Navigation Goal (Task 3)</h3>
+      <p style="font-size:0.875rem;">
+        Collects 3 confident <strong>HSV</strong> detections of the red pillow and averages their x/y.
+        Same averaging strategy as Tasks 1 &amp; 2 for navigation stability, but using
+        color segmentation confidence (fill ratio) rather than YOLO score.
+      </p>
+    </div>
+    <div class="card">
+      <h3>PAUSE — Settling Before Pickup (Tasks 1 &amp; 2)</h3>
+      <p style="font-size:0.875rem;">
+        A 3-second delay after navigation lets the robot stop moving and stale
+        detection data age out. The pickup node waits for a fresh detection after
+        this window — ensuring the arm target comes from a stationary robot pose.
+        Task 3 skips this phase; grasp positions are hardcoded so no fresh pose is needed.
+      </p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── RESULTS ───────────────────────── -->
+<section id="results">
+  <div class="section-label">Results</div>
+  <h2>Videos &amp; Demos</h2>
+  <p>
+    Below are demonstration videos from both simulation (MuJoCo) and the real hardware.
+    <!-- INSTRUCTION: Replace the video-placeholder divs below with:
+         <div class="video-embed"><iframe src="https://www.youtube.com/embed/YOUR_VIDEO_ID" allowfullscreen></iframe></div>
+         Upload your videos to YouTube and paste the video ID in. -->
+  </p>
+
+  <div class="video-grid">
+    <div>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task1.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <p class="video-label">Task 1 — Voice-commanded object retrieval on real hardware</p>
+    </div>
+    <div>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task2.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <p class="video-label">Task 2 — Sequential pick-and-place on real hardware</p>
+    </div>
+    <div>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task3.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <p class="video-label">Task 3 — Bimanual pillow retrieval on real hardware</p>
+    </div>
+    <div>
+      <div class="video-placeholder">
+        <span class="icon">🖥️</span>
+        <span>MuJoCo Simulation Demo</span>
+      </div>
+      <p class="video-label">Full pipeline in MuJoCo simulation</p>
+    </div>
+  </div>
+
+  <!-- Outcomes summary -->
+  <div style="margin-top:2.5rem;">
+    <h3>Outcomes</h3>
+    <div class="card-grid card-grid-3" style="margin-top:1rem;">
+      <div class="card">
+        <h3>Task 1 — Object Retrieval</h3>
+        <p style="font-size:0.875rem;">
+          [Add your Task 1 results here — e.g. success rate, objects tested, any notes on what worked or didn't.]
+        </p>
+      </div>
+      <div class="card">
+        <h3>Task 2 — Pick-and-Place</h3>
+        <p style="font-size:0.875rem;">
+          [Add your Task 2 results here — e.g. success rate, objects and containers tested, placement accuracy.]
+        </p>
+      </div>
+      <div class="card">
+        <h3>Task 3 — Bimanual Pillow Retrieval</h3>
+        <p style="font-size:0.875rem;">
+          With approximately 2 hours of hardware tuning — primarily dialling in the grasp height (z) and the
+          standoff distance to the pillow — the full pipeline ran reliably end-to-end.
+          The HSV-based red pillow detector identified the target consistently across trials.
+          The robot navigated to the correct standoff position each time without overshoot.
+          Both arms grasped and lifted the pillow successfully on every attempt once parameters were set,
+          demonstrating a robust bimanual pickup despite the limited tuning time.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── TEAM ───────────────────────── -->
+<section id="team">
+  <div class="section-label">The Team</div>
+  <h2>Team Contributions</h2>
+  <p>
+    Group 5 — Monday 6–7:30pm &nbsp;·&nbsp; TA: Giuse Pham
+  </p>
+
+  <div class="team-grid" style="margin-top:1.5rem;">
+
+    <div class="team-card">
+      <div class="team-name">Esteban Rincon</div>
+      <div class="team-role">Coordinator Pipeline · Manipulation · Perception · Perception Integration</div>
+      <ul class="team-contrib">
+        <li>Authored all manipulation code end-to-end, including the full Task 1 &amp; 2 pickup pipelines (approach, descend, grasp, lift, drop)</li>
+        <li>Bridged real-time vision detection with arm execution — object poses flow directly from YOLO into IK-based grasp targets</li>
+        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
+        <li>Built adaptive pan-tilt camera sweep in task2_pickup for robust close-range re-detection before grasping</li>
+        <li>Led end-to-end testing and debugging across perception, manipulation, and coordinator layers on real hardware</li>
+        <li>Built and maintained the project website</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">James Cheng</div>
+      <div class="team-role">Perception · NLP Integration · Navigation · Coordinator</div>
+      <ul class="team-contrib">
+        <li>Got YOLO perception pipeline working for real-time object detection</li>
+        <li>Integrated perception with NLP node for voice-driven object targeting</li>
+        <li>Integrated perception with navigation node for autonomous approach</li>
+        <li>Built coordinator node to orchestrate the full end-to-end pipeline</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Yazhou Zhang</div>
+      <div class="team-role">Perception · NLP · Manipulation</div>
+      <ul class="team-contrib">
+        <li>Depth-to-world coordinate projection with CameraInfo + TF</li>
+        <li>NLP interface initial implementation</li>
+        <li>Real-hardware manipulation tuning (left arm, tolerances)</li>
+        <li>RealSense depth-color alignment &amp; topic fallback</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Marco Vizcarra</div>
+      <div class="team-role">Navigation · Base Motion · Simulation</div>
+      <ul class="team-contrib">
+        <li>Developed the foundational base-motion scripts (movement_1–4.py) for robot navigation and motion control.</li>
+        <li>Ran simulation and real-robot tests to validate behaviors and support deployment.</li>
+        <li>Helped with calibration and integration, including frame alignment, yaw offsets, and pose consistency.</li>
+        <li>Implemented <code>safe_movement.py</code> and test utilities for safer motion and debugging.</li>
+        <li>Improved robustness through iterative troubleshooting, odometry checks, and sim-to-real validation.</li>
+        <li>Provided the navigation base later used for higher-level robot behaviors.</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Ke Wang</div>
+      <div class="team-role"><!-- FILL IN role -->[Role]</div>
+      <ul class="team-contrib">
+        <!-- FILL IN contributions -->
+        <li>[Describe contributions]</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Becky Miller</div>
+      <div class="team-role">Manipulation Assist · Task 3 Planning · Documentation</div>
+      <ul class="team-contrib">
+        <!-- FILL IN contributions -->
+        <li>Early collaboration with Estaban on manipulation pipeline</li>
+        <li>Develop Task 3 off-robot testing and code adaptation with Mathijs</li>
+        <li>Documentation: work on slides and website</li>
+      </ul>
+    </div>
+
+    <div class="team-card">
+      <div class="team-name">Mathijs Ammerlaan</div>
+      <div class="team-role">Task 3 — Perception · Navigation · Manipulation · Pipeline</div>
+      <ul class="team-contrib">
+        <li>Collaborated with Marco on perception code, extending the navigation and detection infrastructure for Task 3</li>
+        <li>Designed and built an HSV-based red pillow detector (<code>detect_object_real_task3.py</code>) with improved 3D pose estimation and a hardcoded-pose toggle for reliable hardware runs</li>
+        <li>Developed an offline tester with auto-scan support for rapid iteration on pillow detection without the robot</li>
+        <li>Authored the Task 3 navigation node with robustness improvements and fixed standalone mode for immediate pose acceptance</li>
+        <li>Implemented bimanual pillow pickup (<code>pickup_task3.py</code>) with hardcoded grasp positions for consistent two-arm grasping</li>
+        <li>Extended the coordinator for Task 3 with a <code>skip_redetect</code> parameter and resolved 3 critical pipeline bugs before hardware testing</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ───────────────────────── CODE ───────────────────────── -->
+<section>
+  <div class="section-label">Code</div>
+  <h2>Codebase</h2>
+  <p>All code is open-source and available on GitHub.</p>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>📁 Repository</h3>
+      <p style="font-size:0.875rem;">
+        <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">
+          github.com/jameszcheng/collaborative-robotics-2026-group5
+        </a>
+      </p>
+      <p style="font-size:0.875rem;">
+        ROS2 Humble workspace with MuJoCo simulation, full coordinator pipeline,
+        perception, navigation, and manipulation nodes.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🔑 Key Files</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li><code>scripts/task1_coordinator.py</code> — Task 1 state machine</li>
+        <li><code>scripts/task2_coordinator.py</code> — Task 2 state machine</li>
+        <li><code>scripts/detect_object_real.py</code> — YOLO perception (T1/T2)</li>
+        <li><code>scripts/navigate_to_object.py</code> — Navigation (T1/T2)</li>
+        <li><code>scripts/task1_pickup.py</code> — Task 1 arm (hold)</li>
+        <li><code>scripts/task2_pickup.py</code> — Task 2 arm (drop)</li>
+        <li><code>launch/task1.launch.py</code> · <code>task2.launch.py</code></li>
+        <li style="margin-top:0.5rem; color:#58a6ff; font-size:0.8rem; list-style:none; margin-left:0;">── Task 3 ──</li>
+        <li><code>scripts/coordinator_node_task3.py</code> — Task 3 coordinator</li>
+        <li><code>scripts/detect_object_real_task3.py</code> — HSV pillow detector</li>
+        <li><code>scripts/navigate_to_object_task3.py</code> — Task 3 navigation</li>
+        <li><code>scripts/pickup_task3.py</code> — Bimanual pickup</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;">Quick Start</h3>
+  <pre>
+# Clone the repo
+git clone https://github.com/jameszcheng/collaborative-robotics-2026-group5.git
+cd collaborative-robotics-2026-group5
+
+# Build
+cd ros2_ws && source /opt/ros/humble/setup.bash && colcon build
+
+# Terminal 1 — Robot hardware + motion planner
+source setup_env.bash
+ros2 launch tidybot_bringup real.launch.py use_planner:=true
+
+# Terminal 2 — Task 1: pick up and return to start
+ros2 launch tidybot_bringup task1.launch.py
+
+# Terminal 2 — Task 2: pick up and drop in bowl/bin
+ros2 launch tidybot_bringup task2.launch.py
+
+# Manual trigger (no voice needed)
+ros2 topic pub /coordinator/start std_msgs/String "data: apple" --once</pre>
+
+  <h3 style="margin-top:1.5rem;">System Requirements</h3>
+  <div class="card-grid card-grid-3" style="margin-top:1rem;">
+    <div class="card">
+      <h3>Software</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>Ubuntu 22.04</li>
+        <li>ROS2 Humble</li>
+        <li>Python 3.10+ (uv)</li>
+        <li>YOLOv8, mink, mujoco</li>
+        <li>google-genai (Gemini)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Hardware</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>TidyBot2 holonomic base</li>
+        <li>2× WX250s 6-DOF arms</li>
+        <li>Intel RealSense D435</li>
+        <li>Pan-tilt camera mount</li>
+        <li>Intel NUC onboard PC</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Robot Specs</h3>
+      <ul class="team-contrib" style="font-size:0.875rem;">
+        <li>Base: 3 DOF (x, y, θ)</li>
+        <li>Arms: 6 DOF each</li>
+        <li>Reach: 650mm, 250g payload</li>
+        <li>Camera: RGB + Depth aligned</li>
+        <li>Comm: Dynamixel + CAN</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── FOOTER ───────────────────────── -->
+<footer>
+  <p>
+    ME 326: Collaborative Robotics &nbsp;·&nbsp; Stanford University &nbsp;·&nbsp; Winter 2026
+  </p>
+  <p style="margin-top:0.5rem;">
+    Group 5 &nbsp;·&nbsp; TA: Giuse Pham &nbsp;·&nbsp;
+    <a href="https://github.com/jameszcheng/collaborative-robotics-2026-group5" target="_blank">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://arm.stanford.edu/courses/collaborative-robotics/" target="_blank">Course Page</a>
+  </p>
+</footer>
+
+</body>
+</html>
