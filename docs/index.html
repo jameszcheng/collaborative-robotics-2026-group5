@@ -701,10 +701,10 @@
       <div class="team-name">Mathijs Ammerlaan</div>
       <div class="team-role">Task 3 — Perception · Navigation · Manipulation · Pipeline</div>
       <ul class="team-contrib">
-        <li>Collaborated with Marco on perception code, extending the navigation and detection infrastructure for Task 3</li>
+        <li>Collaborated with Becky on Task 3 off-robot testing and code adaptation, extending the navigation and detection infrastructure for Task 3</li>
         <li>Designed and built an HSV-based red pillow detector (<code>detect_object_real_task3.py</code>) with improved 3D pose estimation and a hardcoded-pose toggle for reliable hardware runs</li>
         <li>Developed an offline tester with auto-scan support for rapid iteration on pillow detection without the robot</li>
-        <li>Authored the Task 3 navigation node with robustness improvements and fixed standalone mode for immediate pose acceptance</li>
+        <li>Authored the Task 3 navigation node (<code>navigate_to_object_task3.py</code>) with three targeted control fixes to prevent overshoot: stop-and-rotate when heading error exceeds 60°, proportional speed ramp in the final 0.2 m to avoid coasting past the standoff, and a tighter heading gate (30° vs 45°) to correct yaw earlier before forward motion; also added a post-arrival <code>face_object</code> alignment phase and fixed standalone mode for immediate pose acceptance</li>
         <li>Implemented bimanual pillow pickup (<code>pickup_task3.py</code>) with hardcoded grasp positions for consistent two-arm grasping</li>
         <li>Extended the coordinator for Task 3 with a <code>skip_redetect</code> parameter and resolved 3 critical pipeline bugs before hardware testing</li>
       </ul>
