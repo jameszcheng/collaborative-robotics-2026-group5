@@ -872,10 +872,10 @@
       <div class="team-name">Esteban Rincon</div>
       <div class="team-role">Coordinator Pipeline · Manipulation · Perception · Perception Integration</div>
       <ul class="team-contrib">
-        <li>Authored all manipulation code end-to-end, including the full Task 1 &amp; 2 pickup pipelines (approach, descend, grasp, lift, drop)</li>
-        <li>Bridged real-time vision detection with arm execution — object poses flow directly from YOLO into IK-based grasp targets</li>
-        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
-        <li>Built adaptive pan-tilt camera sweep in task2_pickup for robust close-range re-detection before grasping</li>
+        <li>Authored <code>task1_pickup.py</code> and <code>task2_pickup.py</code> end-to-end, including the full pickup pipelines (approach, descend, grasp, lift, drop)</li>
+        <li>Bridged real-time vision detection with arm execution in <code>detect_object_real.py</code> — object poses flow directly from YOLO into IK-based grasp targets</li>
+        <li>Designed &amp; implemented <code>task1_coordinator.py</code> and <code>task2_coordinator.py</code> state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
+        <li>Built adaptive pan-tilt camera sweep in <code>task2_pickup.py</code> for robust close-range re-detection before grasping</li>
         <li>Led end-to-end testing and debugging across perception, manipulation, and coordinator layers on real hardware</li>
         <li>Built and maintained the project website</li>
       </ul>
