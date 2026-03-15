@@ -389,6 +389,26 @@
         <td>tidybot_bringup/scripts/</td>
         <td>Task 2 arm node — approach → descend → grasp → lift → drop 25 cm right</td>
       </tr>
+      <tr style="border-top: 2px solid #1f6feb44;">
+        <td><code>coordinator_node_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Task 3 state machine — detect pillow → navigate → bimanual pick up (skip_redetect mode)</td>
+      </tr>
+      <tr>
+        <td><code>detect_object_real_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>HSV color segmentation for red pillow → contour centroid → 3D pose or hardcoded fallback</td>
+      </tr>
+      <tr>
+        <td><code>navigate_to_object_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Bimanual-centred navigation (lateral_offset=0) with overshoot-prevention controller</td>
+      </tr>
+      <tr>
+        <td><code>pickup_task3.py</code></td>
+        <td>tidybot_bringup/scripts/</td>
+        <td>Bimanual pillow pickup — R_APPROACH → R_DESCEND → R_GRASP → L_APPROACH → L_DESCEND → L_GRASP → LIFT</td>
+      </tr>
     </tbody>
   </table>
 
@@ -447,8 +467,10 @@
   <h3 style="margin-top:2rem;">Coordinator State Machines</h3>
   <p>
     Each task has its own coordinator with a dedicated finite state machine. States share a common
-    pattern; the key difference is Task 1 adds a <strong>RETURNING</strong> state to drive back to
-    the start, while Task 2 ends immediately after the drop.
+    pattern: Task 1 adds a <strong>RETURNING</strong> state to drive back to the start after pickup;
+    Task 2 ends immediately after dropping the object; Task 3 uses a streamlined machine that skips
+    the REDETECTING phase entirely (<code>skip_redetect=True</code>), going directly from navigation
+    to bimanual pickup using hardcoded grasp coordinates.
   </p>
 
   <div class="pipeline">
@@ -523,6 +545,93 @@
     </div>
   </div>
 
+  <!-- Task 3 Data Flow -->
+  <div class="pipeline" style="margin-top:2rem;">
+    <h3 style="margin-bottom:1.25rem;">Task 3 — End-to-End Data Flow (Bimanual Pillow Retrieval)</h3>
+    <pre style="font-size:0.78rem;">
+  Manual trigger: ros2 topic pub /coordinator/start std_msgs/String "data: pillow" --once
+      │
+      ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │              coordinator_node_task3.py                  │
+  │        (skip_redetect=True — streamlined FSM)           │
+  └─────────────────────────┬───────────────────────────────┘
+                             │
+              ─ ─ ─ ─ ─ Phase 1: SEARCHING ─ ─ ─ ─ ─
+                             │
+                             ▼
+                   detect_object_real_task3.py
+                   HSV dual-band red mask (hue 0–10, 170–180)
+                   Largest contour centroid → image coords
+                   20th-pct mask depth → 3D back-projection
+                   Publishes /perception/object_pose
+                             │
+                   Coordinator collects 3 confident detections,
+                   averages x/y → stable navigation goal
+                             │
+              ─ ─ ─ ─ ─ Phase 2: NAVIGATING ─ ─ ─ ─ ─
+                             │
+                             ▼
+                   navigate_to_object_task3.py
+                   lateral_offset=0 (centred for bimanual)
+                   Stop-and-rotate when heading error &gt;60°
+                   Proportional slowdown in final 0.2 m
+                   Face-object yaw alignment at standoff
+                   Publishes /coordinator/nav_complete
+                             │
+              ─ ─ ─ ─ ─ Phase 3: PICKING_UP ─ ─ ─ ─ ─
+                   (skip_redetect=True: no re-detection phase)
+                             │
+                             ▼
+                   pickup_task3.py — Bimanual State Machine
+                   R_APPROACH  right arm above right grasp (+7 cm)
+                   R_DESCEND   right arm descends to z=0.15 m
+                   R_GRASP     right gripper closes
+                   L_APPROACH  left arm above left grasp (−7 cm)
+                   L_DESCEND   left arm descends to z=0.15 m
+                   L_GRASP     left gripper closes
+                   LIFT        both arms lift to z=0.30 m
+                             │
+                             ▼
+                   /coordinator/pickup_complete → DONE → IDLE
+    </pre>
+  </div>
+
+  <!-- Task 3 State Machine -->
+  <div class="pipeline" style="margin-top:1.5rem;">
+    <p style="font-size:0.8rem; color:#58a6ff; font-weight:600; margin-bottom:0.5rem;">Task 3 — Bimanual Pillow Retrieval</p>
+    <div class="states">
+      <div class="state-box">IDLE</div>
+      <div class="arrow">→</div>
+      <div class="state-box">SEARCHING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">NAVIGATING</div>
+      <div class="arrow">→</div>
+      <div class="state-box">PICKING_UP</div>
+      <div class="arrow">→</div>
+      <div class="state-box">DONE</div>
+      <div class="arrow">→</div>
+      <div class="state-box" style="opacity:.6;">IDLE</div>
+    </div>
+    <div style="text-align:center; color:#484f58; font-size:0.8rem; margin: 0.5rem 0 1.25rem;">
+      <code>skip_redetect=True</code> (default) bypasses the REDETECTING phase — pickup uses hardcoded grasp coordinates.
+      Any state transitions to FAILED on timeout, sending an e-stop and resetting to IDLE.
+    </div>
+
+    <div class="state-desc">
+      <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 30s)</span>
+      <p>HSV detector identifies the red pillow. Collects <strong>3 confident detections</strong> (≥0.4 fill-ratio confidence) and averages their x/y to form a stable navigation goal. Filters out stale poses that arrived before the pipeline was triggered.</p>
+    </div>
+    <div class="state-desc">
+      <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 90s)</span>
+      <p>Robot drives to a <strong>0.4 m standoff</strong> centred in front of the pillow (lateral_offset=0 for bimanual reach). Three controller fixes prevent overshoot: stop-and-rotate when &gt;60° misaligned, proportional slowdown in the last 0.2 m, and a tighter 30° heading gate. Finalises with a yaw alignment to face the pillow.</p>
+    </div>
+    <div class="state-desc">
+      <strong>PICKING_UP</strong> <span style="color:#484f58;font-size:0.8rem;">(timeout: 120s — 2× longer than single-arm)</span>
+      <p>Triggers <code>pickup_task3.py</code> via <code>/coordinator/pickup_trigger</code>. The 7-state bimanual sequence runs: right arm approaches and grasps the right end of the pillow (x=+7 cm), then the left arm approaches and grasps the left end (x=−7 cm), then both arms lift together to z=0.30 m. All grasp positions are hardcoded in <code>base_link</code> for reliability at known standoff.</p>
+    </div>
+  </div>
+
   <!-- Nodes detail -->
   <h3 style="margin-top:2rem;">Node Details</h3>
   <div class="card-grid card-grid-2" style="margin-top:1rem;">
@@ -564,6 +673,61 @@
     </div>
   </div>
 
+  <!-- Task 3 Node Cards -->
+  <h3 style="margin-top:2rem;">Task 3 Node Details</h3>
+  <div class="card-grid card-grid-2" style="margin-top:1rem;">
+    <div class="card">
+      <h3>🔴 HSV Pillow Detector</h3>
+      <p style="font-size:0.875rem;">
+        Replaces YOLO with <strong>OpenCV HSV color segmentation</strong> tuned for a red pillow.
+        Red hue wraps at 180 in OpenCV, so two masks (hue 0–10 and 170–180) are ORed together.
+        Morphological open+close (7×7 ellipse kernel) removes noise. The largest red contour above
+        a minimum area threshold is taken as the detection. Confidence is the red-pixel fill ratio
+        inside the bounding box (0–1). The contour <strong>centroid via cv2.moments</strong> is used
+        for 3D back-projection — more accurate than the bounding box midpoint for an irregular pillow shape.
+        Depth is sampled at the <strong>20th percentile over the mask</strong> (front surface of pillow,
+        ignores background). A <code>use_hardcoded_pose</code> flag bypasses depth estimation entirely
+        and publishes a pre-measured fixed pose for reliable hardware runs.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🧭 Task 3 Navigation Node</h3>
+      <p style="font-size:0.875rem;">
+        Adapted from the Task 1/2 navigator with three key changes for bimanual operation.
+        <strong>lateral_offset=0.0</strong> (vs 0.15 m) centres the robot so both arms have equal reach.
+        Three overshoot-prevention fixes: (1) stop-and-rotate in place when heading error &gt;60°,
+        (2) proportional speed ramp in the final 0.2 m down to 0.05 m/s minimum,
+        (3) forward speed reduced by 70% when heading error &gt;30°.
+        After reaching standoff, rotates to align yaw toward the pillow from the actual arrived position.
+        Publishes <code>/coordinator/nav_complete</code> and also works standalone (no coordinator required).
+      </p>
+    </div>
+    <div class="card">
+      <h3>🦾🦾 Bimanual Pickup Node</h3>
+      <p style="font-size:0.875rem;">
+        7-state machine: <strong>R_APPROACH → R_DESCEND → R_GRASP → L_APPROACH → L_DESCEND → L_GRASP → LIFT</strong>.
+        Right arm grasps the right end of the pillow (x=+7 cm, y=0.40 m, z=0.15 m);
+        left arm grasps the left end (x=−7 cm, y=0.40 m, z=0.15 m). Both arms lift sequentially to z=0.30 m.
+        All grasp positions are <strong>hardcoded in base_link</strong> — more reliable than depth-estimated
+        poses at close range where the RealSense is less accurate.
+        Uses the shared <code>/plan_to_target</code> IK service with explicit arm name selection.
+        Both grippers controlled via the same wrapper node used in Tasks 1 &amp; 2.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🎛️ Task 3 Coordinator</h3>
+      <p style="font-size:0.875rem;">
+        Extends the base coordinator with a <code>skip_redetect</code> parameter (default <code>True</code>).
+        When enabled, the REDETECTING phase is skipped entirely — after navigation completes, pickup is
+        triggered immediately with hardcoded grasp coordinates. This avoids unreliable close-range depth
+        estimation without sacrificing pipeline automation.
+        <code>pickup_timeout</code> raised to 120 s (2× the single-arm timeout) to accommodate the 7-step
+        bimanual sequence. Stale-pose filtering via <code>_search_min_pose_stamp_sec</code> prevents
+        detections from before pipeline start from triggering wrong navigation goals.
+      </p>
+    </div>
+  </div>
+
   <!-- Camera sweep -->
   <h3 style="margin-top:2rem;">Camera Sweep in Task 2 Pickup</h3>
   <p>
@@ -584,19 +748,28 @@
   <h3 style="margin-top:2rem;">Perception Strategy: SEARCHING + PAUSE</h3>
   <div class="card-grid card-grid-2" style="margin-top:1rem;">
     <div class="card">
-      <h3>SEARCHING — Navigation Goal</h3>
+      <h3>SEARCHING — Navigation Goal (Tasks 1 &amp; 2)</h3>
       <p style="font-size:0.875rem;">
-        Collects 3 confident YOLO detections from 1–2 m away and averages their x/y.
+        Collects 3 confident <strong>YOLO</strong> detections from 1–2 m away and averages their x/y.
         Single-frame depth at distance is noisy; averaging prevents wrong-direction
         navigation while keeping the robot responsive.
       </p>
     </div>
     <div class="card">
-      <h3>PAUSE — Settling Before Pickup</h3>
+      <h3>SEARCHING — Navigation Goal (Task 3)</h3>
+      <p style="font-size:0.875rem;">
+        Collects 3 confident <strong>HSV</strong> detections of the red pillow and averages their x/y.
+        Same averaging strategy as Tasks 1 &amp; 2 for navigation stability, but using
+        color segmentation confidence (fill ratio) rather than YOLO score.
+      </p>
+    </div>
+    <div class="card">
+      <h3>PAUSE — Settling Before Pickup (Tasks 1 &amp; 2)</h3>
       <p style="font-size:0.875rem;">
         A 3-second delay after navigation lets the robot stop moving and stale
         detection data age out. The pickup node waits for a fresh detection after
-        this window—ensuring the arm target comes from a stationary robot pose.
+        this window — ensuring the arm target comes from a stationary robot pose.
+        Task 3 skips this phase; grasp positions are hardcoded so no fresh pose is needed.
       </p>
     </div>
   </div>
@@ -617,24 +790,29 @@
 
   <div class="video-grid">
     <div>
-      <!-- REPLACE with: <div class="video-embed"><iframe src="https://www.youtube.com/embed/XXXX" allowfullscreen></iframe></div> -->
-      <div class="video-placeholder">
-        <span class="icon">🎥</span>
-        <span>Task 1: Object Retrieval (Real Robot)</span>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task1.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
       </div>
       <p class="video-label">Task 1 — Voice-commanded object retrieval on real hardware</p>
     </div>
     <div>
-      <div class="video-placeholder">
-        <span class="icon">🎥</span>
-        <span>Task 2: Pick-and-Place (Real Robot)</span>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task2.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
       </div>
       <p class="video-label">Task 2 — Sequential pick-and-place on real hardware</p>
     </div>
     <div>
-      <div class="video-placeholder">
-        <span class="icon">🎥</span>
-        <span>Task 3: [Group Task] (Real Robot)</span>
+      <div class="video-embed">
+        <video controls style="width:100%;height:100%;object-fit:cover;">
+          <source src="../videos/task3.MOV" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
       </div>
       <p class="video-label">Task 3 — Bimanual pillow retrieval on real hardware</p>
     </div>
@@ -654,23 +832,24 @@
       <div class="card">
         <h3>Task 1 — Object Retrieval</h3>
         <p style="font-size:0.875rem;">
-          <!-- FILL IN: success rate, objects tested, notes -->
-          [Describe results — e.g., "X/Y successful grasps across N objects tested.
-          Objects included banana, apple, bottle."]
+          [Add your Task 1 results here — e.g. success rate, objects tested, any notes on what worked or didn't.]
         </p>
       </div>
       <div class="card">
         <h3>Task 2 — Pick-and-Place</h3>
         <p style="font-size:0.875rem;">
-          <!-- FILL IN: success rate, objects/containers tested -->
-          [Describe results — e.g., "Successfully placed objects into basket in X/Y trials."]
+          [Add your Task 2 results here — e.g. success rate, objects and containers tested, placement accuracy.]
         </p>
       </div>
       <div class="card">
         <h3>Task 3 — Bimanual Pillow Retrieval</h3>
         <p style="font-size:0.875rem;">
-          <!-- FILL IN: success rate once tested -->
-          [Describe Task 3 results here — e.g., "Successfully grasped pillow bimanually in X/Y trials."]
+          With approximately 2 hours of hardware tuning — primarily dialling in the grasp height (z) and the
+          standoff distance to the pillow — the full pipeline ran reliably end-to-end.
+          The HSV-based red pillow detector identified the target consistently across trials.
+          The robot navigated to the correct standoff position each time without overshoot.
+          Both arms grasped and lifted the pillow successfully on every attempt once parameters were set,
+          demonstrating a robust bimanual pickup despite the limited tuning time.
         </p>
       </div>
     </div>
@@ -798,11 +977,16 @@
       <ul class="team-contrib" style="font-size:0.875rem;">
         <li><code>scripts/task1_coordinator.py</code> — Task 1 state machine</li>
         <li><code>scripts/task2_coordinator.py</code> — Task 2 state machine</li>
-        <li><code>scripts/detect_object_real.py</code> — Perception</li>
-        <li><code>scripts/navigate_to_object.py</code> — Navigation</li>
+        <li><code>scripts/detect_object_real.py</code> — YOLO perception (T1/T2)</li>
+        <li><code>scripts/navigate_to_object.py</code> — Navigation (T1/T2)</li>
         <li><code>scripts/task1_pickup.py</code> — Task 1 arm (hold)</li>
         <li><code>scripts/task2_pickup.py</code> — Task 2 arm (drop)</li>
         <li><code>launch/task1.launch.py</code> · <code>task2.launch.py</code></li>
+        <li style="margin-top:0.5rem; color:#58a6ff; font-size:0.8rem; list-style:none; margin-left:0;">── Task 3 ──</li>
+        <li><code>scripts/coordinator_node_task3.py</code> — Task 3 coordinator</li>
+        <li><code>scripts/detect_object_real_task3.py</code> — HSV pillow detector</li>
+        <li><code>scripts/navigate_to_object_task3.py</code> — Task 3 navigation</li>
+        <li><code>scripts/pickup_task3.py</code> — Bimanual pickup</li>
       </ul>
     </div>
   </div>
