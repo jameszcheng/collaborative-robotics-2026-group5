@@ -431,7 +431,7 @@
       <tr>
         <td><code>pickup_task3.py</code></td>
         <td>tidybot_bringup/scripts/</td>
-        <td>Task 3 bimanual — R grasp → L grasp → lift → rotate → release</td>
+        <td>Task 3 bimanual — R_APPROACH → R_DESCEND → R_GRASP → L_APPROACH → L_DESCEND → L_GRASP → LIFT → ROTATE → RELEASE</td>
       </tr>
     </tbody>
   </table>
@@ -509,7 +509,7 @@
     </div>
     <div class="state-desc">
       <strong>SEARCHING</strong> <span style="color:#484f58;font-size:0.8rem;">(30s)</span>
-      <p>Accumulates 3 confident detections (≥0.35), averages x/y into a stable nav goal.</p>
+      <p>Tasks 1&amp;2: accumulates 3 confident YOLO detections (≥0.35 confidence), averages x/y into a stable nav goal. Task 3: accumulates 15 HSV pose samples and averages them before locking the navigation target.</p>
     </div>
     <div class="state-desc">
       <strong>NAVIGATING</strong> <span style="color:#484f58;font-size:0.8rem;">(90s)</span>
