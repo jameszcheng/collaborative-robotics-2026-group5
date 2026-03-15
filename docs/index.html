@@ -581,6 +581,7 @@
   <div class="section-label">Results</div>
   <h2>Videos &amp; Demos</h2>
 
+  <h3 style="margin-bottom:1rem;">Task Demonstrations</h3>
   <div class="video-grid">
     <div>
       <div class="video-embed"><iframe src="https://www.youtube.com/embed/b-k2ogw0q00" allowfullscreen></iframe></div>
@@ -594,9 +595,21 @@
       <div class="video-embed"><iframe src="https://www.youtube.com/embed/jjK5Xxc0aho" allowfullscreen></iframe></div>
       <p class="video-label">Task 3 — Bimanual pillow retrieval on real hardware</p>
     </div>
+  </div>
+
+  <h3 style="margin-top:2.5rem; margin-bottom:1rem;">Technical Demos</h3>
+  <div class="video-grid">
     <div>
       <div class="video-embed"><iframe src="https://www.youtube.com/embed/MJcdqKY8u14" allowfullscreen></iframe></div>
       <p class="video-label">Navigation in MuJoCo simulation</p>
+    </div>
+    <div>
+      <div class="video-embed"><iframe src="https://www.youtube.com/embed/ISKG4xUjwXY" allowfullscreen></iframe></div>
+      <p class="video-label">Camera Sweep RViz Visualization</p>
+    </div>
+    <div>
+      <div class="video-embed"><iframe src="https://www.youtube.com/embed/1QZzr4KoXQ0" allowfullscreen></iframe></div>
+      <p class="video-label">Robot Navigation: Return to Origin</p>
     </div>
   </div>
 </section>
@@ -617,10 +630,10 @@
       <div class="team-name">Esteban Rincon</div>
       <div class="team-role">Coordinator Pipeline · Manipulation · Perception · Perception Integration</div>
       <ul class="team-contrib">
-        <li>Authored all manipulation code end-to-end, including the full Task 1 &amp; 2 pickup pipelines (approach, descend, grasp, lift, drop)</li>
-        <li>Bridged real-time vision detection with arm execution — object poses flow directly from YOLO into IK-based grasp targets</li>
-        <li>Designed &amp; implemented the Task 1 &amp; 2 coordinator state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
-        <li>Built adaptive pan-tilt camera sweep in task2_pickup for robust close-range re-detection before grasping</li>
+        <li>Authored <code>task1_pickup.py</code> and <code>task2_pickup.py</code> end-to-end, including the full pickup pipelines (approach, descend, grasp, lift, drop)</li>
+        <li>Bridged real-time vision detection with arm execution in <code>detect_object_real.py</code> — object poses flow directly from YOLO into IK-based grasp targets</li>
+        <li>Designed &amp; implemented <code>task1_coordinator.py</code> and <code>task2_coordinator.py</code> state machines orchestrating the full detect → navigate → pick → return/drop pipeline</li>
+        <li>Built adaptive pan-tilt camera sweep in <code>task2_pickup.py</code> for robust close-range re-detection before grasping</li>
         <li>Led end-to-end testing and debugging across perception, manipulation, and coordinator layers on real hardware</li>
         <li>Built and maintained the project website</li>
       </ul>
@@ -678,7 +691,7 @@
       <div class="team-name">Becky Miller</div>
       <div class="team-role">Manipulation Assist · Task 3 Planning · Documentation</div>
       <ul class="team-contrib">
-        <li>Early collaboration with Estaban on manipulation pipeline</li>
+        <li>Early collaboration with Esteban on manipulation pipeline</li>
         <li>Develop Task 3 off-robot testing and code adaptation with Mathijs</li>
         <li>Documentation: work on slides and website</li>
       </ul>
